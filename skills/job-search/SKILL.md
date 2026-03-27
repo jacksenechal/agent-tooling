@@ -9,7 +9,7 @@ description: >
 
 # Job Search Pipeline Skill
 
-You are managing Jack's job application pipeline. This skill orchestrates the full
+You are managing the user's job application pipeline. This skill orchestrates the full
 workflow from LinkedIn job URL to ready-to-apply state.
 
 **Run the entire pipeline end-to-end without stopping for user confirmation.** The user
@@ -132,10 +132,10 @@ in Stage 3), draft responses for each one.
 
 1. Read `jobs/<id>/application-form.md` for the questions
 2. Read `jobs/<id>/job-posting.md` for context on what the company values
-3. Read the tailored `resume.md` from the resume branch for Jack's background
+3. Read the tailored `resume.md` from the resume branch for the user's background
 4. Read `/home/jack/workspace/resume/CONTEXT.md` for factual constraints
 5. Draft responses that are:
-   - Authentic and specific to Jack's experience (not generic)
+   - Authentic and specific to the user's experience (not generic)
    - Tailored to the role and company
    - Concise but substantive
    - Honest about experience level (per CONTEXT.md constraints)
@@ -195,13 +195,13 @@ Steps:
 Categorize every connection found into tiers based on their value for getting a referral:
 
 **Tier 1 — Warm intro through 1st-degree (highest value):**
-A 1st-degree connection who can introduce Jack or submit a referral. This is almost always
+A 1st-degree connection who can introduce the user or submit a referral. This is almost always
 stronger than cold outreach to a 2nd-degree. A message from a mutual carries social proof
 and obligation to at least look. The mutual can also provide intel on the team, hiring
 process, and whether the role is genuinely open.
 
 **Tier 2 — Peer-level ICs on the same or adjacent team (best direct outreach):**
-Engineers or ICs at Jack's level or one above, on the team the role belongs to or a
+Engineers or ICs at the user's level or one above, on the team the role belongs to or a
 neighboring team. They understand the role, can speak credibly about fit, and most companies
 give referral bonuses. Peer-to-peer conversation feels natural, not like asking a favor.
 These are the best targets for direct outreach if no strong 1st-degree path exists.
@@ -211,8 +211,8 @@ If the hiring manager is visible (e.g., from the Hiring Team section of the job 
 reaching out can be powerful but framing is critical. Do NOT lead with "I applied for your
 role." Lead with genuine curiosity about what they're building — a thoughtful question about
 their team's direction. If the conversation goes well, they will often say "you should apply"
-or connect Jack with recruiting. This is the strongest outcome because it becomes a pull
-rather than a push. Only recommend this path if Jack can craft an insightful, non-generic opener.
+or connect the user with recruiting. This is the strongest outcome because it becomes a pull
+rather than a push. Only recommend this path if the user can craft an insightful, non-generic opener.
 
 **Tier 4 — Adjacent department (low conversion, low risk):**
 People in other departments (product, other engineering teams). Good for intel-gathering
@@ -252,7 +252,7 @@ When writing the outreach plan:
 **1. [Tier/approach]: [Name]**
 - Why: <why this person is a good target>
 - Approach: <specific suggested approach — what to say, how to frame it>
-- Draft message: <a short, natural-sounding message Jack can adapt>
+- Draft message: <a short, natural-sounding message the user can adapt>
 
 **2. [Tier/approach]: [Name]**
 - Why: ...
@@ -263,7 +263,7 @@ When writing the outreach plan:
 
 ### General Notes
 - <any strategic observations — e.g., "strong mutual connection through X",
-  "hiring manager has published articles on Y that Jack could reference",
+  "hiring manager has published articles on Y that the user could reference",
   "no strong 1st-degree path, direct peer outreach is the best bet">
 ```
 
@@ -393,6 +393,34 @@ with open('/home/jack/workspace/job-search/tracker.csv', 'w', newline='') as f:
 "
 ```
 
+## Application Form Defaults
+
+Personal details for pre-filling application forms are stored in the **private** job-search
+repo at `/home/jack/workspace/job-search/profile.md`. Read that file before filling any
+application form. It contains contact info, links, work authorization, EEO responses, and
+other standard fields.
+
+**NEVER put personal details in this skill file** — it lives in a public repo.
+
+### Form-Filling Strategy with browsermcp
+
+1. **Resume upload**: browsermcp cannot do file uploads. Prompt the user to upload
+   `resume.pdf` from the resume branch manually.
+2. **"Apply with LinkedIn" button**: If present on a Lever/Greenhouse form, clicking this
+   can prefill name, email, phone, location, company, and LinkedIn URL — saving significant
+   time. However, it triggers an OAuth popup that may not work reliably through browsermcp.
+   Worth trying first; fall back to manual field entry if it fails.
+3. **Dropdowns**: Lever's custom location dropdown doesn't work with `browser_select_option`.
+   Use the click-then-ArrowDown-key approach instead (click the combobox, press ArrowDown to
+   select the desired option). Standard HTML `<select>` elements (like EEO dropdowns) do
+   work with `browser_select_option` using the visible option text as the value.
+4. **Location autocomplete**: Lever's location field is a Google Places autocomplete. Type
+   the city name only (e.g., "Portland"), wait for suggestions to load, then press ArrowDown
+   and Enter to select.
+5. **Stale refs**: After each `browser_type` or `browser_click`, the page snapshot refs
+   update. Always use refs from the most recent snapshot — parallel field fills will fail
+   with stale ref errors. Fill fields sequentially.
+
 ## Important Rules
 
 1. **Run end-to-end without pausing.** Do not stop to ask for user confirmation between stages. The user reviews everything after the pipeline completes.
@@ -402,3 +430,5 @@ with open('/home/jack/workspace/job-search/tracker.csv', 'w', newline='') as f:
 5. **Use `_publish`** after every resume edit, and commit the generated artifacts.
 6. **Always push both repos** at the end of a pipeline run so work is resumable from any device.
 7. **Draft application responses** for any written questions — the user should be able to copy-paste these into the application form with minimal editing.
+8. **Never submit applications automatically.** Fill out every field, then stop. The user clicks Submit.
+9. **No PII in this skill file.** All personal details live in the private job-search repo (`profile.md`).

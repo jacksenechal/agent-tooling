@@ -2,7 +2,7 @@
 
 **Getting banned from LinkedIn would be catastrophic. These rules are non-negotiable.**
 
-browsermcp controls Jack's real Chrome browser with his real LinkedIn session. This means
+browsermcp controls the user's real Chrome browser with their real LinkedIn session. This means
 browser fingerprinting is not a concern — but behavioral detection absolutely is. LinkedIn
 monitors for automation through timing patterns, repetitive access, and unnatural browsing
 behavior.
@@ -54,7 +54,7 @@ Never automate ANY of these on LinkedIn:
 - Following companies or people
 - Any action that modifies LinkedIn state
 
-These are ALWAYS done manually by Jack.
+These are ALWAYS done manually by the user.
 
 ### 8. CAPTCHA / Unusual Activity Detection
 If a `browser_snapshot` or `browser_screenshot` reveals:
