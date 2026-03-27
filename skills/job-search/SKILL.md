@@ -165,51 +165,46 @@ in Stage 3), draft responses for each one.
 
 **READ `references/linkedin-safety.md` BEFORE THIS STAGE.**
 
-This stage does a thorough search of the user's network at the company. It uses two separate
-searches (1st degree, then 2nd degree) and pages through ALL 2nd-degree results to build
-a complete map before doing strategic analysis.
+This stage does a thorough search of the user's network at the company using LinkedIn's
+semantic search, then pages through all results to build a complete map before doing
+strategic analysis.
 
-#### Step 1: Search 1st-degree connections
+#### Step 1: Search connections via semantic query
 
-One page load is usually sufficient — the user rarely has many 1st-degree connections at a
-given company.
+Use a single conversational search that leverages LinkedIn's semantic search engine to find
+both 1st and 2nd degree connections who currently work at the company. Construct the URL:
 
 ```
-https://www.linkedin.com/search/results/people/?keywords=<URL-ENCODED-COMPANY-NAME>&origin=FACETED_SEARCH&network=%5B%22F%22%5D
+https://www.linkedin.com/search/results/people/?keywords=my%20connections%20who%20currently%20work%20at%20<URL-ENCODED-COMPANY-NAME>&origin=FACETED_SEARCH&network=%5B%22F%22%2C%22S%22%5D
 ```
 
-1. Navigate (with safety protocol — delay + scroll)
+Example for "Aircall":
+```
+https://www.linkedin.com/search/results/people/?keywords=my%20connections%20who%20currently%20work%20at%20aircall&origin=FACETED_SEARCH&network=%5B%22F%22%2C%22S%22%5D
+```
+
+The `network` filter restricts to 1st (`F`) and 2nd (`S`) degree. Past 2nd degree is useless.
+The semantic query "my connections who currently work at" narrows to current employees, which
+is significantly more useful than a plain company name search.
+
+1. Navigate to the search URL (with safety protocol — delay + scroll)
 2. `browser_snapshot` to capture results
-3. Record every person: name, title, any visible details
-4. Navigate to `google.com` as breather
-
-#### Step 2: Search 2nd-degree connections (page through ALL results)
-
-2nd-degree connections are the primary referral pipeline. Page through every page of results
-to build the complete map.
-
-```
-https://www.linkedin.com/search/results/people/?keywords=<URL-ENCODED-COMPANY-NAME>&origin=FACETED_SEARCH&network=%5B%22S%22%5D
-```
-
-1. Navigate to the first page (with safety protocol)
-2. `browser_snapshot` to capture results
-3. Record every person: name, title, mutual connections shown
-4. **Page through results**: Look for a "Next" button or pagination. For each additional page:
+3. Record every person: name, title, connection degree, mutual connections shown
+4. **Page through ALL results**: Look for a "Next" button or pagination. For each additional page:
    - Navigate to `google.com` as breather (wait 2000-3000ms)
    - Navigate to the next page URL (with safety protocol — full delay + scroll)
    - `browser_snapshot` and record all results
    - Continue until no more pages or you hit the **hard cap of 8 LinkedIn page loads** for
-     this sub-step (covering ~80 results, which is comprehensive for most companies)
+     this step (covering ~80 results, which is comprehensive for most companies)
 5. **NEVER click into individual profiles** — only read what's visible on search results pages
 6. Navigate to `google.com` to end LinkedIn browsing
 
-#### Step 3: Cross-reference with hiring team
+#### Step 2: Cross-reference with hiring team
 
 Pull in the hiring team members identified in Stage 1 (from `jobs/<id>/job-posting.md`).
 Note which hiring team members appeared in the search results and at what degree.
 
-#### Step 4: Strategic analysis and outreach plan
+#### Step 3: Strategic analysis and outreach plan
 
 With the complete map of connections, do a deep analysis. For EVERY person found, assess:
 - **Relevance**: Are they on the hiring team's org? Adjacent team? Different department?
