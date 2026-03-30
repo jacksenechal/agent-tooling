@@ -81,117 +81,23 @@ tools as browsermcp.
 
 ### Setup
 
-Create a directory for the Docker config (e.g., `docker/playwright/` in your job-search repo).
+The skill includes ready-to-use Docker config in `assets/playwright/`
+(`docker-compose.yml` + `start-mcp.sh`). Run compose directly from there — no need to
+copy files into your job-search repo.
 
-#### 1. `docker-compose.yml`
-
-```yaml
-services:
-  playwright-display:
-    image: ghcr.io/xtr-dev/mcp-playwright-novnc:latest
-    container_name: playwright-display
-    ports:
-      - "6080:6080"   # noVNC web interface
-      - "3080:3080"   # MCP SSE endpoint
-    volumes:
-      # Your resume repo — so the browser can access resume.pdf for uploads.
-      # Change this path to wherever your resume repo lives.
-      - ${RESUME_REPO_PATH:-~/workspace/resume}:/home/pwuser/resume:ro
-      # Browser profile — persists LinkedIn sessions across container restarts
-      - playwright-profile:/home/pwuser/persistent-profile
-      # Custom start script for session persistence
-      - ./start-mcp.sh:/usr/local/bin/start-mcp.sh:ro
-    environment:
-      - SCREEN_WIDTH=1920
-      - SCREEN_HEIGHT=1080
-      - MCP_BROWSER=chromium
-      - MCP_PORT=3080
-    shm_size: '2gb'
-    # Required: Docker's default seccomp profile is too restrictive for Chromium.
-    # Without these, Chromium crashes with SIGTRAP on launch.
-    cap_add:
-      - SYS_PTRACE
-    security_opt:
-      - seccomp:unconfined
-    restart: unless-stopped
-    networks:
-      - playwright-network
-
-volumes:
-  playwright-profile:
-
-networks:
-  playwright-network:
-    name: playwright-network
-```
-
-#### 2. `start-mcp.sh`
-
-This replaces the upstream start script to enable session persistence. The upstream uses
-`--isolated` (in-memory profile, fresh on every connection). We remove that and add
-`--user-data-dir` and `--shared-browser-context` so LinkedIn cookies survive restarts and
-all MCP clients share one browser instance.
+#### 1. Start the container
 
 ```bash
-#!/bin/bash
-set -e
-
-# Wait for X11 to be ready
-sleep 2
-
-# Kill any orphaned browser processes from a previous crash
-for pid_exe in /proc/[0-9]*/exe; do
-    if ls -l "$pid_exe" 2>/dev/null | grep -q "chrome\|chromium"; then
-        target_pid=$(echo "$pid_exe" | cut -d/ -f3)
-        echo "Cleaning up stale browser process: $target_pid"
-        kill -9 "$target_pid" 2>/dev/null || true
-    fi
-done
-
-# Profile directory mapped to a Docker volume
-USER_DATA_DIR="/home/pwuser/persistent-profile"
-mkdir -p "$USER_DATA_DIR"
-
-# Clean stale Chromium lock files from ungraceful shutdowns
-rm -f "$USER_DATA_DIR/SingletonLock" \
-      "$USER_DATA_DIR/SingletonCookie" \
-      "$USER_DATA_DIR/SingletonSocket" 2>/dev/null || true
-
-VIEWPORT_WIDTH=$((${SCREEN_WIDTH:-1920} - 0))
-VIEWPORT_HEIGHT=$((${SCREEN_HEIGHT:-1080} - 0))
-
-echo "Starting Playwright MCP server..."
-echo "  Port: ${MCP_PORT:-3000}"
-echo "  Browser: ${MCP_BROWSER:-chromium}"
-echo "  Display: ${DISPLAY:-:99}"
-echo "  Viewport: ${VIEWPORT_WIDTH}x${VIEWPORT_HEIGHT}"
-echo "  User Data Dir: $USER_DATA_DIR"
-
-# --user-data-dir: persistent profile (sessions survive restarts)
-# --shared-browser-context: all SSE clients share one browser instance
-# No --isolated: enables persistence to disk
-exec node /app/cli.js \
-    --host 0.0.0.0 \
-    --port "${MCP_PORT:-3000}" \
-    --browser "${MCP_BROWSER:-chromium}" \
-    --config /etc/playwright-config.json \
-    --allowed-hosts "*" \
-    --viewport-size "${VIEWPORT_WIDTH}x${VIEWPORT_HEIGHT}" \
-    --user-data-dir "$USER_DATA_DIR" \
-    --shared-browser-context
-```
-
-Make it executable: `chmod +x start-mcp.sh`
-
-#### 3. Start the container
-
-```bash
-cd docker/playwright
+export RESUME_REPO_PATH=~/workspace/resume   # path to your resume repo
+cd ~/workspace/agent-tools/skills/job-search/assets/playwright
 docker compose up -d
 ```
 
 - noVNC UI: http://localhost:6080
 - MCP SSE endpoint: http://localhost:3080/sse
+
+`start-mcp.sh` replaces the upstream start script to remove `--isolated`, enabling LinkedIn
+session persistence across container restarts via the `playwright-profile` Docker volume.
 
 #### 4. MCP client configuration
 
@@ -255,7 +161,7 @@ The container runs with `restart: unless-stopped`, so it persists across reboots
 manage it:
 
 ```bash
-cd docker/playwright
+cd ~/workspace/agent-tools/skills/job-search/assets/playwright
 docker compose up -d      # Start
 docker compose restart    # Restart (preserves profile volume)
 docker compose down       # Stop (preserves profile volume)

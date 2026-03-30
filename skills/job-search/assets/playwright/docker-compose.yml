@@ -1,0 +1,39 @@
+services:
+  playwright-display:
+    image: ghcr.io/xtr-dev/mcp-playwright-novnc:latest
+    container_name: playwright-display
+    ports:
+      - "6080:6080"   # noVNC web interface
+      - "3080:3080"   # MCP SSE endpoint
+    volumes:
+      # Resume repo — for programmatic file uploads (resume.pdf).
+      # Set RESUME_REPO_PATH before running, e.g.:
+      #   export RESUME_REPO_PATH=~/workspace/resume
+      #   docker compose up -d
+      - ${RESUME_REPO_PATH}:/home/pwuser/resume:ro
+      # Browser profile — persists LinkedIn session across container restarts
+      - playwright-profile:/home/pwuser/persistent-profile
+      # Custom start script: removes --isolated to enable session persistence
+      - ./start-mcp.sh:/usr/local/bin/start-mcp.sh:ro
+    environment:
+      - SCREEN_WIDTH=1920
+      - SCREEN_HEIGHT=1080
+      - MCP_BROWSER=chromium
+      - MCP_PORT=3080
+    shm_size: '2gb'
+    # Required: Docker's default seccomp profile is too restrictive for Chromium.
+    # Without these, Chromium crashes with SIGTRAP on launch.
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    restart: unless-stopped
+    networks:
+      - playwright-network
+
+volumes:
+  playwright-profile:
+
+networks:
+  playwright-network:
+    name: playwright-network
