@@ -77,7 +77,35 @@ Walk through the full pipeline for a new job posting end-to-end.
    ## Notes
    <initial observations on fit, concerns>
    ```
-6. Update tracker: `company`, `role`, `application_url`, `stage=researched`
+6. Research company on Glassdoor:
+   - Navigate to `https://www.glassdoor.com/Search/results.htm?keyword=<URL-encoded-company-name>` (no LinkedIn safety delays needed — this is not LinkedIn)
+   - `browser_snapshot` the search results, click through to the company's Reviews page
+   - `browser_snapshot` the Reviews overview to capture: overall rating, CEO approval, "recommend to a friend" %, and the pros/cons summary
+   - Scroll down and snapshot to capture more review highlights if available
+   - Save to `jobs/<id>/glassdoor.md`:
+     ```markdown
+     # Glassdoor — <Company>
+
+     **URL**: <glassdoor-reviews-url>
+     **Overall Rating**: <X.X/5>
+     **Recommend to a Friend**: <X%>
+     **CEO Approval**: <X%>
+
+     ## Pros (common themes)
+     - <theme>
+
+     ## Cons (common themes)
+     - <theme>
+
+     ## Notable Reviews
+     <2-3 particularly insightful snippets relevant to the role/team>
+
+     ## Takeaways for Application
+     <What to emphasize in cover letter/interviews based on what employees value;
+      what concerns to probe during interviews>
+     ```
+   - If the company isn't found on Glassdoor, note that in `glassdoor.md` and move on
+7. Update tracker: `company`, `role`, `application_url`, `stage=researched`
 
 **Stage 2: Tailor Resume**
 
@@ -123,7 +151,7 @@ Walk through the full pipeline for a new job posting end-to-end.
 
 For any written questions or essays identified in Stage 3:
 
-1. Read `jobs/<id>/application-form.md`, `jobs/<id>/job-posting.md`, tailored `resume.md`, and `~/workspace/resume/CONTEXT.md`
+1. Read `jobs/<id>/application-form.md`, `jobs/<id>/job-posting.md`, `jobs/<id>/glassdoor.md`, tailored `resume.md`, and `~/workspace/resume/CONTEXT.md`
 2. Draft responses: specific to the user's experience, tailored to role and company, concise, honest per CONTEXT.md constraints
 3. Save to `jobs/<id>/application-responses.md` with each question clearly labeled. If no written questions, note that.
 
@@ -178,7 +206,7 @@ Update tracker: `referral_contact` with top recommendation, `referral_status=ide
 
 **Stage 6: Finalize & Push**
 
-1. Verify all artifacts exist: `job-posting.md`, `application-form.md`, `application-responses.md`, `connections.md`, resume PDF on branch `job/<id>`
+1. Verify all artifacts exist: `job-posting.md`, `glassdoor.md`, `application-form.md`, `application-responses.md`, `connections.md`, resume PDF on branch `job/<id>`
 2. Update tracker: `stage=ready_to_apply`
 3. Commit and push job-search repo:
    ```bash

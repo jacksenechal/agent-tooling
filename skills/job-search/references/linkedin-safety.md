@@ -36,6 +36,7 @@ After EVERY `browser_navigate` to any linkedin.com URL:
 ### 5. Natural Scrolling Pattern
 After the page loads and the wait completes, simulate natural reading:
 1. `browser_press_key` with `PageDown` → `browser_wait` 1500-3000ms
+2. Simulate some small random mouse movements
 2. `browser_press_key` with `PageDown` → `browser_wait` 2000-4000ms
 3. Optionally scroll back up with `PageUp` → `browser_wait` 1000-2000ms
 4. THEN take a `browser_snapshot` to read the content
