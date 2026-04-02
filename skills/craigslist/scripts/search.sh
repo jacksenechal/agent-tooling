@@ -1,23 +1,27 @@
 #!/bin/bash
 # Craigslist Search Script
-# Usage: ./search.sh --query "search term" --location "sfbay" --price-max 100
+# Usage: ./search.sh --query "search term" --location "eby/nby" --price-max 100
 
-QUERY=$2
-LOCATION=$4
-PRICE_MAX=$6
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --query) QUERY="$2"; shift ;;
+        --location) LOCATION="$2"; shift ;;
+        --price-max) PRICE_MAX="$2"; shift ;;
+    esac
+    shift
+done
 
-echo "Searching ${LOCATION} Craigslist for ${QUERY} with max price ${PRICE_MAX}..."
+# Split location (expected "nby" or "eby")
+IFS=',' read -ra LOCS <<< "$LOCATION"
 
-# Logic implemented by Janet:
-# Use web_search to find craigslist results
-# This would require an integration with the web_search tool,
-# but for a standalone script, we can document the search strategy here.
+for LOC in "${LOCS[@]}"; do
+    echo "Searching ${LOC} Craigslist for ${QUERY} with max price ${PRICE_MAX}..."
+    # Switch to 'sss' for "all sale items" which is usually more inclusive than just 'for'
+    SEARCH_URL="https://sfbay.craigslist.org/search/${LOC}/sss?query=${QUERY// /+}&max_price=${PRICE_MAX}"
+    
+    echo "Strategy: Use web_search on OpenClaw with URL: ${SEARCH_URL}"
+done
 
-SEARCH_URL="https://${LOCATION}.craigslist.org/search/sss?query=${QUERY// /+}&max_price=${PRICE_MAX}"
-
-echo "Strategy: Use web_search on OpenClaw with URL: ${SEARCH_URL}"
-echo "Filtering based on reliability keywords: Litter-Robot, ScoopFree, CatGenie"
-echo "Logging search criteria to ./data/search_history.log"
-
+# Logging
 mkdir -p ../data
 echo "$(date): Search for '${QUERY}' in ${LOCATION} (max: ${PRICE_MAX})" >> ../data/search_history.log
