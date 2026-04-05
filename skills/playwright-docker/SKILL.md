@@ -92,8 +92,8 @@ Verify it's running:
 docker ps | grep playwright-display
 ```
 
-noVNC is at http://localhost:6080/vnc.html. The browser itself does not launch until the
-first MCP tool call.
+noVNC is at http://localhost:6080/vnc.html. The golden Chromium browser starts
+automatically. Isolated browsers launch on the first MCP tool call.
 
 #### 2. Add the MCP server (user-scoped, persists across all projects)
 
@@ -118,10 +118,8 @@ Call `mcp__playwright__browser_navigate` to `https://google.com` and confirm
 
 ### `golden open` — Start using the golden session
 
-The golden session runs automatically alongside the isolated server. To interact with it:
-
-1. Open noVNC at http://localhost:6080/vnc.html
-2. The golden browser launches on the first MCP connection to port 3081
+The golden Chromium browser starts automatically with the container (visible in noVNC).
+To automate it via Claude Code:
 
 To connect Claude Code to the golden session (for explicit automation):
 ```bash
@@ -141,9 +139,18 @@ After logging into sites in the golden session, export cookies and localStorage:
 docker exec -e NODE_PATH=/app/node_modules playwright-display node /usr/local/bin/export-storage-state.js /home/pwuser/state/storage-state.json
 ```
 
-This writes a Playwright storage state file that isolated sessions load automatically.
-After exporting, new isolated MCP connections will pick up the auth state. Existing
-connections keep their current state (reconnect via `/mcp` or new conversation to refresh).
+This writes a Playwright storage state file. The isolated MCP server loads `--storage-state`
+at process startup, so after exporting you need to restart the container for isolated
+sessions to pick up the new auth state:
+
+```bash
+export RESUME_REPO_PATH=~/workspace/resume
+cd ~/workspace/agent-tools/skills/playwright-docker/assets
+docker compose restart
+```
+
+Then reconnect MCP (`/mcp` or new conversation). The golden session's logins are unaffected
+by the restart (profile persists in a Docker volume).
 
 To verify the export:
 ```bash
@@ -172,6 +179,7 @@ docker compose up -d --build
 ### `stop` — Stop the container
 
 ```bash
+export RESUME_REPO_PATH=~/workspace/resume
 cd ~/workspace/agent-tools/skills/playwright-docker/assets
 docker compose down
 ```
@@ -179,6 +187,7 @@ docker compose down
 ### `restart` — Restart the container
 
 ```bash
+export RESUME_REPO_PATH=~/workspace/resume
 cd ~/workspace/agent-tools/skills/playwright-docker/assets
 docker compose restart
 ```
@@ -256,8 +265,9 @@ docker ps --filter "ancestor=mcp-playwright-novnc:local" --format "{{.ID}} {{.Co
 ### Storage state not loading in isolated sessions
 
 1. Check the file exists: `docker exec playwright-display ls -la /home/pwuser/state/storage-state.json`
-2. Check start-mcp.sh sees it: `docker exec playwright-display cat /usr/local/bin/start-mcp.sh`
-3. Reconnect MCP (`/mcp`) — storage state is loaded at connection time, not dynamically.
+2. Check start-mcp.sh sees it: `docker exec playwright-display cat /var/log/supervisor/playwright-mcp.log | grep "Storage state"`
+3. `--storage-state` is loaded at MCP server startup, not per-connection. After exporting,
+   restart the container (`docker compose restart`) then reconnect (`/mcp`).
 
 ---
 
@@ -302,6 +312,7 @@ The container is configured with `restart: unless-stopped`, so it survives reboo
 The golden session's browser profile persists across restarts via a Docker named volume.
 
 ```bash
+export RESUME_REPO_PATH=~/workspace/resume
 cd ~/workspace/agent-tools/skills/playwright-docker/assets
 
 docker compose up -d --build  # Start/rebuild
@@ -309,6 +320,9 @@ docker compose restart        # Restart (reconnect MCP after)
 docker compose down           # Stop (golden profile preserved)
 docker compose down -v        # Stop and delete golden profile + storage state
 ```
+
+**Note**: `RESUME_REPO_PATH` must be set for all `docker compose` commands (the compose
+file references it for the resume volume mount).
 
 ---
 
