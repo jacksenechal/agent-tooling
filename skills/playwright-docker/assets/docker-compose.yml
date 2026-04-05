@@ -4,20 +4,35 @@ services:
       context: ./mcp-playwright-novnc
     image: mcp-playwright-novnc:local
     container_name: playwright-display
+    # Start as root to fix volume permissions, then supervisord runs processes as pwuser
+    user: root
     ports:
       - "6080:6080"   # noVNC web interface
-      - "3080:3080"   # MCP SSE endpoint
+      - "3080:3080"   # MCP SSE endpoint (isolated sessions)
+      - "3081:3081"   # MCP SSE endpoint (golden session)
     volumes:
       # Resume repo — for programmatic file uploads (resume.pdf)
       - ${RESUME_REPO_PATH}:/home/pwuser/resume:ro
       # Workaround: Claude Code sends MCP roots as host paths → EACCES in container.
       # Custom start-mcp.sh adds --output-dir to override.
       - ./start-mcp.sh:/usr/local/bin/start-mcp.sh:ro
+      # Golden session: browser launcher + MCP server + export script
+      - ./start-golden-browser.sh:/usr/local/bin/start-golden-browser.sh:ro
+      - ./start-mcp-golden.sh:/usr/local/bin/start-mcp-golden.sh:ro
+      - ./export-storage-state.js:/usr/local/bin/export-storage-state.js:ro
+      - golden-profile:/home/pwuser/golden-profile
+      # Storage state: shared between golden (writes) and isolated sessions (reads)
+      - storage-state:/home/pwuser/state
+      # Custom entrypoint + supervisord.conf overlay
+      - ./entrypoint.sh:/entrypoint.sh:ro
+      - ./supervisord.conf:/etc/supervisor/conf.d/supervisord.conf:ro
     environment:
       - SCREEN_WIDTH=1920
       - SCREEN_HEIGHT=1080
       - MCP_BROWSER=chromium
       - MCP_PORT=3080
+      - GOLDEN_MCP_PORT=3081
+      - STORAGE_STATE_PATH=/home/pwuser/state/storage-state.json
     shm_size: '2gb'
     cap_add:
       - SYS_PTRACE
@@ -26,6 +41,12 @@ services:
     restart: unless-stopped
     networks:
       - playwright-network
+
+volumes:
+  golden-profile:
+    name: playwright-golden-profile
+  storage-state:
+    name: playwright-storage-state
 
 networks:
   playwright-network:

@@ -2,11 +2,11 @@
 name: playwright-docker
 description: >
   Dockerized Playwright + noVNC browser automation. Manages headless Chromium in Docker
-  with file upload support and MCP integration. Browser sessions are isolated (ephemeral).
-  Use as the default browser automation tool for any task requiring web interaction,
-  form filling, scraping, or automated browsing.
+  with file upload support and MCP integration. Supports hybrid golden/isolated sessions:
+  golden session maintains persistent logins, isolated sessions use exported auth state.
   Triggers on: "playwright setup", "playwright start", "playwright stop", "playwright status",
-  "browser docker", "start browser", "browser automation setup".
+  "browser docker", "start browser", "browser automation setup", "golden session", "golden open",
+  "golden export".
 ---
 
 # Playwright Docker Skill
@@ -19,21 +19,41 @@ submodule) with minimal modifications for Claude Code compatibility.
 
 ## Architecture
 
-- **Docker container** (`playwright-display`): Runs Chromium + Microsoft Playwright MCP server + noVNC
+### Hybrid Golden + Isolated Sessions
+
+Two MCP servers run in the same container on different ports:
+
+| | Isolated (default) | Golden |
+|---|---|---|
+| **Port** | 3080 | 3081 |
+| **Mode** | `--isolated` (ephemeral) | `--cdp-endpoint` → persistent Chromium |
+| **Auth** | Loaded from exported storage state | Maintained via noVNC login |
+| **Parallelism** | Fully parallelizable | Single-client only |
+| **Use case** | All agent work (scraping, form filling) | Logging into sites, maintaining sessions |
+
+**Flow**: User logs into sites via golden session (noVNC) → export storage state → isolated sessions automatically load cookies.
+
+### Components
+
+- **Docker container** (`playwright-display`): Runs persistent golden Chromium + two Playwright MCP servers + noVNC
 - **MCP connection**: Claude Code connects via `mcp__playwright__` tools (stdio → SSE proxy)
-- **noVNC**: http://localhost:6080/vnc.html — watch or manually interact with the browser in real time
-- **Browser sessions are ephemeral** (`--isolated`): each MCP connection gets a fresh browser
+- **noVNC**: http://localhost:6080/vnc.html — watch or manually interact with the browser
+- **Golden session** (port 3081): Persistent browser profile for logins
+- **Isolated sessions** (port 3080): Ephemeral browsers pre-loaded with exported auth state
 
 ### Upstream modifications
 
 The upstream source lives in `assets/mcp-playwright-novnc/` as a **git submodule**. We
-overlay two changes without modifying it:
+overlay changes without modifying it:
 
-1. **`--output-dir /tmp/.playwright-mcp`** (in `start-mcp.sh` mount) — Claude Code sends
-   MCP `roots` with host filesystem paths that don't exist inside the container. Without
-   this, the server tries to `mkdir` at those paths and fails with EACCES.
-2. **Local image build** — the upstream GHCR package is private/unavailable, so
-   `docker-compose.yml` uses `build: context: ./mcp-playwright-novnc` instead.
+1. **`--output-dir /tmp/.playwright-mcp`** (in `start-mcp.sh`) — Claude Code sends MCP
+   `roots` with host paths that don't exist in the container (EACCES workaround).
+2. **Local image build** — upstream GHCR package is private/unavailable.
+3. **Custom `supervisord.conf`** — adds golden browser + golden MCP server processes.
+4. **`start-golden-browser.sh`** — launches persistent Chromium with `--user-data-dir` and CDP on port 9222.
+5. **`start-mcp-golden.sh`** — golden MCP server that connects to golden Chromium via `--cdp-endpoint`.
+6. **`export-storage-state.js`** — exports auth state from golden browser via Playwright CDP.
+7. **Custom `entrypoint.sh`** — fixes Docker volume ownership before starting supervisord.
 
 ## Prerequisites
 
@@ -82,7 +102,7 @@ Check if already configured:
 grep -q playwright ~/.claude.json && echo "already configured"
 ```
 
-If not:
+If not, add the isolated session MCP server (default for all agent work):
 ```bash
 claude mcp add --scope user playwright -- docker run --rm -i --network=playwright-network mcp-playwright-novnc:local mcp-proxy http://playwright-display:3080/sse
 ```
@@ -93,6 +113,51 @@ Tools will be available as `mcp__playwright__browser_*`.
 
 Call `mcp__playwright__browser_navigate` to `https://google.com` and confirm
 `mcp__playwright__browser_snapshot` returns content.
+
+---
+
+### `golden open` — Start using the golden session
+
+The golden session runs automatically alongside the isolated server. To interact with it:
+
+1. Open noVNC at http://localhost:6080/vnc.html
+2. The golden browser launches on the first MCP connection to port 3081
+
+To connect Claude Code to the golden session (for explicit automation):
+```bash
+claude mcp add --scope user playwright-golden -- docker run --rm -i --network=playwright-network mcp-playwright-novnc:local mcp-proxy http://playwright-display:3081/sse
+```
+
+Tools are then available as `mcp__playwright-golden__browser_*`.
+
+**Important**: Only one client should use the golden session at a time (user via noVNC
+or Claude Code, not both simultaneously).
+
+### `golden export` — Export auth state to isolated sessions
+
+After logging into sites in the golden session, export cookies and localStorage:
+
+```bash
+docker exec -e NODE_PATH=/app/node_modules playwright-display node /usr/local/bin/export-storage-state.js /home/pwuser/state/storage-state.json
+```
+
+This writes a Playwright storage state file that isolated sessions load automatically.
+After exporting, new isolated MCP connections will pick up the auth state. Existing
+connections keep their current state (reconnect via `/mcp` or new conversation to refresh).
+
+To verify the export:
+```bash
+docker exec playwright-display cat /home/pwuser/state/storage-state.json | python3 -m json.tool | head -20
+```
+
+### `golden close` — Remove golden MCP server from Claude Code
+
+If you no longer need direct automation of the golden session:
+```bash
+claude mcp remove playwright-golden
+```
+
+The golden browser process continues running in the container (logins persist).
 
 ---
 
@@ -125,6 +190,14 @@ new Claude Code conversation or run `/mcp` to reconnect.
 
 ```bash
 docker ps --filter name=playwright-display --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+```
+
+Check both MCP servers are responding:
+```bash
+# Isolated (3080)
+curl -s http://localhost:3080/sse -o /dev/null -w "%{http_code}"
+# Golden (3081)
+curl -s http://localhost:3081/sse -o /dev/null -w "%{http_code}"
 ```
 
 Also confirm MCP connectivity: `mcp__playwright__browser_navigate` to `https://google.com`.
@@ -172,6 +245,20 @@ The `--output-dir` workaround isn't active. Check that `start-mcp.sh` is mounted
 docker exec playwright-display cat /usr/local/bin/start-mcp.sh | grep output-dir
 ```
 
+### Golden session: "browser already in use" lock error
+
+Only one client can connect to the golden session at a time. Check for stale proxy
+containers connected to port 3081:
+```bash
+docker ps --filter "ancestor=mcp-playwright-novnc:local" --format "{{.ID}} {{.Command}}" | grep 3081 | awk '{print $1}' | xargs -r docker kill
+```
+
+### Storage state not loading in isolated sessions
+
+1. Check the file exists: `docker exec playwright-display ls -la /home/pwuser/state/storage-state.json`
+2. Check start-mcp.sh sees it: `docker exec playwright-display cat /usr/local/bin/start-mcp.sh`
+3. Reconnect MCP (`/mcp`) — storage state is loaded at connection time, not dynamically.
+
 ---
 
 ## Using the Browser Tools
@@ -212,13 +299,15 @@ Use `browser_file_upload` with the container-internal path. The resume repo is m
 ## Container Lifecycle
 
 The container is configured with `restart: unless-stopped`, so it survives reboots.
+The golden session's browser profile persists across restarts via a Docker named volume.
 
 ```bash
 cd ~/workspace/agent-tools/skills/playwright-docker/assets
 
 docker compose up -d --build  # Start/rebuild
 docker compose restart        # Restart (reconnect MCP after)
-docker compose down           # Stop
+docker compose down           # Stop (golden profile preserved)
+docker compose down -v        # Stop and delete golden profile + storage state
 ```
 
 ---
@@ -227,5 +316,5 @@ docker compose down           # Stop
 
 - Docker and Docker Compose
 - ~3GB disk for the locally-built image
-- ~1GB RAM while running
-- Port 6080 (noVNC) and 3080 (MCP SSE) available locally
+- ~1GB RAM while running (+ ~500MB for golden session browser)
+- Ports 6080 (noVNC), 3080 (isolated MCP), and 3081 (golden MCP) available locally
