@@ -59,7 +59,19 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
     justify-content: center; align-items: center; padding: 2rem;
   }}
   .diagram-overlay.active {{ display: flex; }}
-  .diagram-overlay .mermaid {{ max-width: 95vw; }}
+  .diagram-overlay .overlay-content {{
+    width: 100%; height: 100%;
+    display: flex; justify-content: center; align-items: center;
+  }}
+  .diagram-overlay .mermaid {{
+    width: 95vw; height: 90vh; max-width: none;
+    display: flex; justify-content: center; align-items: center;
+    padding: 1em;
+  }}
+  .diagram-overlay .mermaid svg {{
+    width: 100% !important; height: 100% !important;
+    max-width: 100% !important; max-height: 100% !important;
+  }}
   .diagram-overlay .close-btn {{
     position: fixed; top: 1rem; right: 1.5rem; z-index: 10000;
     background: #333; color: #fff; border: none; border-radius: 4px;
