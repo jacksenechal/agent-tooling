@@ -19,9 +19,9 @@ will review artifacts after the run completes.
 
 ## Project Locations
 
-- **Job search repo**: `~/workspace/job-search/` (private GitHub repo)
-- **Tracker**: `~/workspace/job-search/tracker.csv`
-- **Job research**: `~/workspace/job-search/jobs/<id>/`
+- **Job search repo**: `~/workspace/jobs/` (private GitHub repo)
+- **Tracker**: `~/workspace/jobs/tracker.csv`
+- **Job research**: `~/workspace/jobs/applications/<id>/`
 - **Resume repo**: `~/workspace/resume/` (separate git repo)
 - **LinkedIn safety rules**: See `references/linkedin-safety.md` — READ THIS before any LinkedIn browsing
 
@@ -64,13 +64,13 @@ Walk through the full pipeline for a new job posting end-to-end.
 **Stage 1: Discover & Research**
 
 1. Generate an `id` slug (e.g., `stripe-infra-eng`, `aircall-ai-eng`). Short, semantic, unique. Do NOT ask the user.
-2. Create `~/workspace/job-search/jobs/<id>/`
+2. Create `~/workspace/jobs/applications/<id>/`
 3. Add row to `tracker.csv`: `stage=discovered`, `date_found=today`
 4. Scrape the job posting via a **haiku subagent**:
    - Spawn an Agent (model: haiku) with the task: "Navigate to `<linkedin-url>` following the LinkedIn safety protocol (see `references/linkedin-safety.md`). Use `browser_snapshot` to capture the full accessibility tree. CAPTCHA RULE: if any snapshot shows a CAPTCHA or security challenge, STOP, navigate to google.com, and return 'CAPTCHA_DETECTED'. Otherwise, return the verbatim snapshot text — company, role, full description, application URL, location, requirements, hiring team (names, titles, connection degree). Do not summarize."
    - `WebFetch` is a fallback if browser tools are unavailable — it summarizes and misses application URLs.
    - The subagent returns raw extracted text; the main thread parses and structures it.
-5. Save to `jobs/<id>/job-posting.md`:
+5. Save to `applications/<id>/job-posting.md`:
    ```markdown
    # <Company> — <Role>
 
@@ -95,7 +95,7 @@ Walk through the full pipeline for a new job posting end-to-end.
    - Spawn an Agent (model: haiku) with the task: "Navigate to `https://www.glassdoor.com/Search/results.htm?keyword=<URL-encoded-company-name>`. Snapshot results, click through to the company's Reviews page, snapshot the overview. Scroll and snapshot to capture more highlights. CAPTCHA RULE: if any snapshot shows a CAPTCHA or security challenge, STOP, navigate to google.com, and return 'CAPTCHA_DETECTED'. Otherwise, return verbatim: overall rating, CEO approval %, recommend-to-friend %, pros/cons summary, and 2-3 notable review snippets. Do not summarize."
    - The subagent returns raw text; the main thread writes `glassdoor.md` and synthesizes takeaways.
    - If the company isn't found on Glassdoor, the subagent notes that and returns.
-   - Save to `jobs/<id>/glassdoor.md`:
+   - Save to `applications/<id>/glassdoor.md`:
      ```markdown
      # Glassdoor — <Company>
 
@@ -131,12 +131,12 @@ Walk through the full pipeline for a new job posting end-to-end.
 8. Copy the PDF into the job directory with a descriptive filename:
    ```bash
    cp ~/workspace/resume/resume.pdf \
-      ~/workspace/job-search/jobs/<id>/"Resume - Jack Senechal - <role>.pdf"
+      ~/workspace/jobs/applications/<id>/"Resume - Jack Senechal - <role>.pdf"
    ```
    Use the actual job title for `<role>` (e.g. `Platform Engineer`, `Staff Software Engineer`).
 9. `git add -A && git commit -m "Tailor resume for <company> <role>"`
 10. `git push -u origin job/<id>`
-11. `xdg-open ~/workspace/job-search/jobs/<id>/"Resume - Jack Senechal - <role>.pdf"`
+11. `xdg-open ~/workspace/jobs/applications/<id>/"Resume - Jack Senechal - <role>.pdf"`
 12. Update tracker: `resume_branch=job/<id>`, `role_branch=<base>`, `stage=resume_tailored`
 
 **Stage 3: Prep Application**
@@ -144,8 +144,8 @@ Walk through the full pipeline for a new job posting end-to-end.
 1. Discover and enumerate the application form via a **haiku subagent**:
    - Spawn an Agent (model: haiku) with the task: "Navigate to `<application_url>` (or if unknown, to the job posting page and find the Apply button). Snapshot the full application form. CAPTCHA RULE: if any snapshot shows a CAPTCHA or security challenge, STOP, navigate to google.com, and return 'CAPTCHA_DETECTED'. Otherwise, return verbatim: every field name, type, whether required or optional, all essay/written questions, and what file uploads are required. Identify the platform (Greenhouse/Lever/Workday/etc). Do not summarize."
    - If no `application_url` is known, have the subagent navigate the job posting and capture the Apply URL first.
-2. Main thread uses the subagent's output to write `jobs/<id>/application-form.md`.
-3. Save to `jobs/<id>/application-form.md`:
+2. Main thread uses the subagent's output to write `applications/<id>/application-form.md`.
+3. Save to `applications/<id>/application-form.md`:
    ```markdown
    # Application Form — <Company> <Role>
 
@@ -171,9 +171,9 @@ Walk through the full pipeline for a new job posting end-to-end.
 
 For any written questions or essays identified in Stage 3:
 
-1. Read `jobs/<id>/application-form.md`, `jobs/<id>/job-posting.md`, `jobs/<id>/glassdoor.md`, tailored `resume.md`, and `~/workspace/resume/CONTEXT.md`
+1. Read `applications/<id>/application-form.md`, `applications/<id>/job-posting.md`, `applications/<id>/glassdoor.md`, tailored `resume.md`, and `~/workspace/resume/CONTEXT.md`
 2. Draft responses: specific to the user's experience, tailored to role and company, concise, honest per CONTEXT.md constraints
-3. Save to `jobs/<id>/application-responses.md` with each question clearly labeled. If no written questions, note that.
+3. Save to `applications/<id>/application-responses.md` with each question clearly labeled. If no written questions, note that.
 
 **Stage 5: Find Connections & Outreach Strategy**
 
@@ -201,7 +201,7 @@ Returns 1st-degree connections at the company ranked by warmth score. See `refer
 
 #### Step 3: Cross-reference with hiring team
 
-Pull hiring team from `jobs/<id>/job-posting.md`. Note which members appeared in search results and at what degree.
+Pull hiring team from `applications/<id>/job-posting.md`. Note which members appeared in search results and at what degree.
 
 #### Step 4: Strategic analysis
 
@@ -220,12 +220,12 @@ Outreach principles:
 
 #### Step 5: Save and update tracker
 
-Save to `jobs/<id>/connections.md` using the template in `references/knowledge-graph.md`.
+Save to `applications/<id>/connections.md` using the template in `references/knowledge-graph.md`.
 Update tracker: `referral_contact` with top recommendation, `referral_status=identified`, `stage=connections_found`.
 
 **Stage 6: Finalize & Push**
 
-1. Verify all artifacts exist: `job-posting.md`, `glassdoor.md`, `application-form.md`, `application-responses.md`, `connections.md`, `Resume - Jack Senechal - <role>.pdf` in `jobs/<id>/`
+1. Verify all artifacts exist: `job-posting.md`, `glassdoor.md`, `application-form.md`, `application-responses.md`, `connections.md`, `Resume - Jack Senechal - <role>.pdf` in `applications/<id>/`
 2. Update tracker: `stage=ready_to_apply`
 3. Commit and push job-search repo:
    ```bash
@@ -242,10 +242,10 @@ Update tracker: `referral_contact` with top recommendation, `referral_status=ide
    Resume: branch job/<id> (pushed to origin)
    Application: <application_url>
    Referral: <referral_contact> (<referral_status>)
-   Research: job-search/jobs/<id>/
+   Research: jobs/applications/<id>/
 
    Files to review before applying:
-   - jobs/<id>/application-responses.md              (edit your written answers)
+   - applications/<id>/application-responses.md              (edit your written answers)
    - jobs/<id>/Resume - Jack Senechal - <role>.pdf   (ready to upload)
 
    Both repos pushed to GitHub — resume from any device with /job-search sync
@@ -296,9 +296,9 @@ Create a fresh job search directory from scratch.
    # Job Search Pipeline
 
    ## Key Paths
-   - **Tracker**: `~/workspace/job-search/tracker.csv`
+   - **Tracker**: `~/workspace/jobs/tracker.csv`
    - **Resume repo**: `~/workspace/resume/`
-   - **Job research**: `~/workspace/job-search/jobs/<id>/`
+   - **Job research**: `~/workspace/jobs/applications/<id>/`
 
    ## LinkedIn Safety — CRITICAL
    See the `job-search` skill's `references/linkedin-safety.md` for full protocol.
@@ -330,7 +330,7 @@ Create a fresh job search directory from scratch.
 1. Run `/playwright-docker setup` to configure Dockerized Playwright (recommended). If the
    user cannot or does not want Docker, fall back to browsermcp — see `references/browser-setup.md`.
 2. Verify by calling `browser_navigate` to `https://google.com` and confirming `browser_snapshot` returns content.
-3. Create `~/workspace/job-search/profile.md` if it doesn't exist:
+3. Create `~/workspace/jobs/profile.md` if it doesn't exist:
    ```markdown
    # Application Profile
 
@@ -404,7 +404,7 @@ with open('tracker.csv','w',newline='') as f:
 
 ## Application Form Defaults
 
-Personal details for pre-filling application forms live at `~/workspace/job-search/profile.md`.
+Personal details for pre-filling application forms live at `~/workspace/jobs/profile.md`.
 Read that file before filling any form. **NEVER put personal details in this skill file.**
 
 ### Form-Filling Strategy
