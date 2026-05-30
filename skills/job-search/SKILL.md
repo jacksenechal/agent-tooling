@@ -36,18 +36,46 @@ file uploads, real-time noVNC monitoring. Run `/playwright-docker setup` if not 
 **Fallback**: browsermcp — controls your real desktop browser. No Docker required, but cannot
 do file uploads. See `references/browser-setup.md` for fallback setup instructions.
 
-## Agent Architecture
+## Research Routing
 
-Browser research (scraping, form discovery, LinkedIn search) is mechanical work that
-consumes context and doesn't benefit from expensive models. Offload it to a cheap subagent;
-keep the main thread for synthesis, resume tailoring, response drafting, and decisions.
+Research is mechanical work that consumes context and doesn't benefit from expensive models.
+Offload it; keep the main thread for synthesis, resume tailoring, response drafting, and
+decisions. There are two lanes — route every research task to the correct one.
+
+**Decision rule**: *Does the task need a logged-in session, or will the site ban a fresh
+automated browser?* → **Yes: Lane B (playwright-docker).** → **No: Lane A (pi-swarm).**
+
+### Lane A — `pi-swarm` (default for all public web research)
+
+For any research that does NOT require login and won't get you banned: company background,
+news, funding, products, engineering blog/culture, tech stack, salary benchmarks, public
+interview-process intel, and any batch of similar lookups. Fan out cheap, sandboxed `pi`
+workers **in parallel** — fast, highly parallel, and saves Claude's context/tokens.
+
+Invoke via the `pi-swarm` skill's wrapper, one background process per task:
+```bash
+~/workspace/agent-tools/skills/pi-swarm/scripts/pi-research.sh \
+  -t 180 -o /tmp/<id>-<topic>.txt -n <id>-<topic> \
+  "Self-contained task. Be concise. End with a line 'SOURCES:' listing every URL you opened."
+```
+Launch several at once, `wait`, then read each `-o` file. **Validate** each (non-empty + has a
+`SOURCES:` block); re-dispatch any empty/flaky one (the free gateway occasionally returns
+empty), optionally on a different model. Synthesize the verified outputs on the main thread.
+
+### Lane B — `playwright-docker` (sensitive / authenticated / ban-prone browsing)
+
+Use the Dockerized Playwright browser via an Agent subagent for anything that needs a
+logged-in session or aggressively bans automation: **LinkedIn** (job postings, connection
+search), **Glassdoor**, and **application form discovery + filling** (the persistent session
+and file uploads live here). **Never send these to pi-swarm** — its sandbox spins up fresh,
+unauthenticated browsers that trip bot detection and risk your accounts.
 
 **Pattern**: spawn a `haiku` subagent (or `sonnet` for multi-step LinkedIn work) via the
 Agent tool. Give it: the URL(s), exact fields to extract, and a requirement to return
-verbatim text — no summarization. The main thread receives the raw data and does all writing.
+verbatim text — no summarization. CAPTCHA = STOP. The main thread does all writing.
 
-Stages that use subagents: **1** (job posting + Glassdoor), **3** (form discovery),
-**5** (LinkedIn connection search).
+Lane B stages: **1** (job posting + Glassdoor), **3** (form discovery), **5** (LinkedIn
+connection search). Lane A stages: **1** (broad public company research).
 
 ## Knowledge Graph
 
@@ -117,7 +145,27 @@ Walk through the full pipeline for a new job posting end-to-end.
      <What to emphasize in cover letter/interviews based on what employees value;
       what concerns to probe during interviews>
      ```
-7. Update tracker: `company`, `role`, `application_url`, `stage=researched`
+   (Glassdoor stays in Lane B — it bans fresh automated browsers — so keep it on
+   playwright-docker, not pi-swarm.)
+7. **Broad company research via `pi-swarm`** (Lane A — public sources, parallel). Fan out
+   several cheap workers at once to enrich the application. Good angles (skip any already
+   covered by Glassdoor):
+   - recent company news, funding, and trajectory
+   - what the team/product does and the tech stack (from the company site, eng blog, GitHub)
+   - engineering culture and values (the company's own sources, not Glassdoor)
+   - role-specific context worth knowing for the cover letter and interviews
+   Launch them in parallel, each writing to its own temp file with a `SOURCES:` requirement:
+   ```bash
+   PI=~/workspace/agent-tools/skills/pi-swarm/scripts/pi-research.sh
+   "$PI" -t 180 -o /tmp/<id>-news.txt  -n <id>-news  "..." &
+   "$PI" -t 180 -o /tmp/<id>-stack.txt -n <id>-stack "..." &
+   "$PI" -t 180 -o /tmp/<id>-eng.txt   -n <id>-eng   "..." &
+   wait
+   ```
+   Validate each output (non-empty + has `SOURCES:`), re-dispatch any empties, then synthesize
+   into `applications/<id>/company-research.md` (sections per angle + a "Takeaways for
+   Application" block). Prefer this over burning main-thread context on public web research.
+8. Update tracker: `company`, `role`, `application_url`, `stage=researched`
 
 **Stage 2: Tailor Resume**
 
@@ -225,7 +273,7 @@ Update tracker: `referral_contact` with top recommendation, `referral_status=ide
 
 **Stage 6: Finalize & Push**
 
-1. Verify all artifacts exist: `job-posting.md`, `glassdoor.md`, `application-form.md`, `application-responses.md`, `connections.md`, `Resume - Jack Senechal - <role>.pdf` in `applications/<id>/`
+1. Verify all artifacts exist: `job-posting.md`, `glassdoor.md`, `company-research.md`, `application-form.md`, `application-responses.md`, `connections.md`, `Resume - Jack Senechal - <role>.pdf` in `applications/<id>/`
 2. Update tracker: `stage=ready_to_apply`
 3. Commit and push job-search repo:
    ```bash
@@ -419,11 +467,15 @@ Read that file before filling any form. **NEVER put personal details in this ski
 
 1. **Run end-to-end without pausing.** The user reviews everything after the pipeline completes.
 2. **CAPTCHA = STOP.** If any `browser_snapshot` or `browser_screenshot` reveals a CAPTCHA, security challenge, "unusual activity" warning, or bot-detection interstitial on ANY site (LinkedIn, Glassdoor, Greenhouse, Lever, Workday, etc.): immediately stop all browser automation, navigate to `google.com`, and ask the user to resolve it via noVNC (http://localhost:6080/vnc.html). Wait for confirmation before resuming. Never attempt to solve or bypass a captcha. This is the ONE exception to "run without pausing."
-3. **LinkedIn safety is non-negotiable.** Read `references/linkedin-safety.md` before any LinkedIn browsing.
-4. **Never automate** connection requests, messages, or application submissions on LinkedIn.
-5. **Always read `resume/CONTEXT.md`** before modifying resume content.
-6. **Use `_publish`** after every resume edit, and commit the generated artifacts.
-7. **Always push both repos** at the end of a pipeline run.
-8. **Draft application responses** for any written questions.
-9. **Never submit applications automatically.** Fill everything, then stop. User clicks Submit.
-10. **No PII in this skill file.** All personal details live in the private job-search repo.
+3. **Route research correctly (see "Research Routing").** Public web research → `pi-swarm`
+   (Lane A), parallelized and cheap. LinkedIn, Glassdoor, and application forms → `playwright-docker`
+   (Lane B). **Never send authenticated or ban-prone sites to pi-swarm** — its fresh,
+   unauthenticated sandbox browsers will trip bot detection and risk your accounts.
+4. **LinkedIn safety is non-negotiable.** Read `references/linkedin-safety.md` before any LinkedIn browsing.
+5. **Never automate** connection requests, messages, or application submissions on LinkedIn.
+6. **Always read `resume/CONTEXT.md`** before modifying resume content.
+7. **Use `_publish`** after every resume edit, and commit the generated artifacts.
+8. **Always push both repos** at the end of a pipeline run.
+9. **Draft application responses** for any written questions.
+10. **Never submit applications automatically.** Fill everything, then stop. User clicks Submit.
+11. **No PII in this skill file.** All personal details live in the private job-search repo.
