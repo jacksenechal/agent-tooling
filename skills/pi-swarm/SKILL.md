@@ -57,16 +57,24 @@ fix (key resolution, `</dev/null` stdin, `timeout` safety net, sandbox flags):
 ```bash
 skills/pi-swarm/scripts/pi-research.sh \
   -m opencode-go/glm-5.1 \   # model (see menu below)
-  -t 180 \                   # hard timeout in seconds (safety net)
+  -t 300 \                   # hard timeout in seconds (safety net; default 300)
   --network on \             # web access (search/fetch + Playwright browser)
-  -o results/task-07.txt \   # capture the agent's answer here
+  -o results/task-07.txt \   # capture the agent's final answer here
   -n swarm-task-07 \         # container/session name (traceability)
   "PROMPT"                   # or: --prompt-file path/to/prompt.md
 ```
 
-It prints a `pi-research: done model=… exit=… elapsed=…s` line to **stderr** and the agent's
-answer to the `-o` file (or stdout). Exit `124` means the worker hit its timeout (partial
-output is still captured).
+The agent's final answer text lands in the `-o` file (or stdout). The wrapper runs pi in
+`--mode json` and writes the raw NDJSON event stream alongside it as `<-o file>.jsonl`, then
+extracts the answer from that stream. Two consequences:
+
+- **Live visibility**: `tail -f results/task-07.txt.jsonl` to watch the worker think, call the
+  browser/search tools, and emit tokens in real time — no more black box until exit.
+- **Timeouts aren't empty**: events flush incrementally, so exit `124` (timeout) still leaves
+  the partial answer in the `-o` file plus the full tool history in the `.jsonl` stream.
+
+It prints a `pi-research: done model=… exit=… elapsed=…s answer_chars=… stream=…` line to
+**stderr**. `answer_chars=0` flags a genuinely empty result (see validation below).
 
 ## Orchestration pattern
 
@@ -78,7 +86,9 @@ output is still captured).
 3. **Collect** as workers finish. Read each `-o` file. **Validate**: an empty file or a missing
    expected marker (e.g. no `SOURCES:`) means a flaky/empty completion — re-dispatch that one
    task (optionally on a different model). Cheap gateways intermittently return empty; budget
-   for a retry pass.
+   for a retry pass. To tell *why* a task failed, check the stderr `done` line: `exit=124` =
+   timeout (raise `-t` or re-dispatch), while `exit=0 answer_chars=0` = a true gateway
+   empty-completion (just retry). The `.jsonl` stream holds the partial work either way.
 4. **Synthesize** the verified worker outputs into the final answer yourself. Treat worker
    findings as research notes from junior agents: cross-check sources, resolve conflicts, and
    own the conclusion.

@@ -6,10 +6,12 @@ services:
     container_name: playwright-display
     # Start as root to fix volume permissions, then supervisord runs processes as pwuser
     user: root
+    # Bind to localhost only — these expose a controllable browser + MCP servers and must
+    # not be reachable from the LAN. Claude Code connects via SSE on 127.0.0.1.
     ports:
-      - "6080:6080"   # noVNC web interface
-      - "3080:3080"   # MCP SSE endpoint (isolated sessions)
-      - "3081:3081"   # MCP SSE endpoint (golden session)
+      - "127.0.0.1:6080:6080"   # noVNC web interface
+      - "127.0.0.1:3080:3080"   # MCP SSE endpoint (isolated sessions)
+      - "127.0.0.1:3081:3081"   # MCP SSE endpoint (golden session)
     volumes:
       # Resume repo — for programmatic file uploads (resume.pdf)
       - ${RESUME_REPO_PATH}:/home/pwuser/resume:ro

@@ -55,13 +55,28 @@ back to an unkeyed provider.
 Check which providers are authed: keys in `~/.pi/agent/auth.json`. List usable models:
 `pi --list-models`.
 
-## Symptom: worker returns empty output (exit 0, 0 bytes, very fast)
+## Symptom: worker returns empty output
 
-The free opencode-go gateway intermittently returns **empty completions** under load
-(especially when hammered or on tool-heavy turns). It's not the wrapper. Mitigations:
+There are **two distinct causes**, now distinguishable from the wrapper's stderr `done` line:
+
+1. **`exit=124 answer_chars=0` — timeout, not a gateway problem.** The worker was killed before
+   it produced text. Free-gateway first-token latency alone is ~7-10s, and a tool-heavy browser
+   task (page loads + multiple round-trips) easily needs minutes, so raise `-t` (default is now
+   300s) or re-dispatch. Because the wrapper streams `--mode json` and flushes incrementally,
+   any text generated *before* the kill is recovered into the `-o` file, and the full tool
+   history is in the `<-o>.jsonl` stream — inspect it to see how far the worker got.
+2. **`exit=0 answer_chars=0` — a true gateway empty-completion.** The free opencode-go gateway
+   intermittently returns nothing under load (especially tool-heavy turns). It's not the
+   wrapper. Just retry.
+
+Historically both looked identical (a 0-byte file) because the old text-mode wrapper only
+emitted the answer at process exit, so a timeout produced an empty file with no clue why. The
+`--mode json` stream fixed that.
+
+Mitigations (both causes):
 
 - **Validate** every worker's output (non-empty + expected marker like `SOURCES:`); re-dispatch
-  failures.
+  failures, keyed on the `exit=`/`answer_chars=` distinction above.
 - **Spread** tasks across models (glm / qwen / deepseek) to decorrelate failures.
 - **Throttle** concurrency to ~5–10 simultaneous workers.
 - Retry on a different model, or fall back to `openai-codex/gpt-5.4-mini` for stubborn tasks.

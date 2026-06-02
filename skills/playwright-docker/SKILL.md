@@ -109,10 +109,19 @@ grep -q playwright ~/.claude.json && echo "already configured"
 
 If not, add the isolated session MCP server (default for all agent work):
 ```bash
-claude mcp add --scope user playwright -- docker run --rm -i --network=playwright-network mcp-playwright-novnc:local mcp-proxy http://playwright-display:3080/sse
+claude mcp add --scope user --transport sse playwright http://localhost:3080/sse
 ```
 
 Tools will be available as `mcp__playwright__browser_*`.
+
+> **Why direct SSE, not a `docker run … mcp-proxy` wrapper?** The container already
+> publishes 3080/3081 on the host, so Claude Code can speak SSE straight to the in-container
+> MCP server. The old `docker run --rm -i … mcp-proxy …` form spawned a throwaway stdio↔SSE
+> bridge container **per conversation**; because `--rm` only fires on container stop and the
+> proxy process doesn't reliably exit when the client disconnects, these leaked and piled up
+> (random-named `mcp-playwright-novnc:local` containers). Direct SSE has identical exposure
+> (same published ports) with nothing to leak. To clean up legacy proxies:
+> `docker ps --filter "ancestor=mcp-playwright-novnc:local" --format '{{.Names}}' | grep -v '^playwright-display$' | xargs -r docker rm -f`
 
 #### 3. Verify
 
@@ -126,7 +135,7 @@ Call `mcp__playwright__browser_navigate` to `https://google.com` and confirm
 The golden Chromium browser starts automatically with the container (visible in noVNC).
 To connect Claude Code to the golden session for automation:
 ```bash
-claude mcp add --scope user playwright-golden -- docker run --rm -i --network=playwright-network mcp-playwright-novnc:local mcp-proxy http://playwright-display:3081/sse
+claude mcp add --scope user --transport sse playwright-golden http://localhost:3081/sse
 ```
 
 Tools are then available as `mcp__playwright-golden__browser_*`.
@@ -191,8 +200,8 @@ cd ~/workspace/agent-tools/skills/playwright-docker/assets
 docker compose restart
 ```
 
-**Important**: After any restart, the MCP proxy holds a stale session ID. Either start a
-new Claude Code conversation or run `/mcp` to reconnect.
+**Important**: After any restart, the SSE connection drops and the in-container MCP server
+issues fresh session IDs. Either start a new Claude Code conversation or run `/mcp` to reconnect.
 
 ### `status` — Check health
 
@@ -229,14 +238,9 @@ After updating, reconnect the MCP server (new conversation or `/mcp`).
 
 ### `MCP error -32603: HTTP 404: Session not found`
 
-The MCP proxy has a stale session from before a container restart. Fix: start a new
-conversation or run `/mcp` to reconnect. If that doesn't work, kill the stale proxy:
-
-```bash
-docker ps --filter "ancestor=mcp-playwright-novnc:local" --format "{{.ID}} {{.Command}}" | grep "mcp-" | awk '{print $1}' | xargs -r docker kill
-```
-
-Then reconnect via `/mcp`.
+The in-container MCP server recycled its session after a restart while Claude Code still held
+the old session ID. Fix: start a new conversation or run `/mcp` to reconnect. If it persists,
+restart the container (`docker compose restart`) then reconnect.
 
 ### `mcp__playwright__` tools not available
 
@@ -254,11 +258,9 @@ docker exec playwright-display cat /usr/local/bin/start-mcp.sh | grep output-dir
 
 ### Golden session: "browser already in use" lock error
 
-Only one client can connect to the golden session at a time. Check for stale proxy
-containers connected to port 3081:
-```bash
-docker ps --filter "ancestor=mcp-playwright-novnc:local" --format "{{.ID}} {{.Command}}" | grep 3081 | awk '{print $1}' | xargs -r docker kill
-```
+Only one client can connect to the golden session (port 3081) at a time — the noVNC user and
+Claude Code can't both drive it. Make sure you're not connected via `/mcp` while also using
+noVNC. If a connection is wedged, `docker compose restart` clears it (golden profile persists).
 
 ### Storage state not loading in isolated sessions
 
