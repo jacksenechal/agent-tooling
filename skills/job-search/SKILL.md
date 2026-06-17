@@ -223,6 +223,25 @@ For any written questions or essays identified in Stage 3:
 2. Draft responses: specific to the user's experience, tailored to role and company, concise, honest per CONTEXT.md constraints
 3. Save to `applications/<id>/application-responses.md` with each question clearly labeled. If no written questions, note that.
 
+**Cover letters**: when a posting wants a cover letter (or it strengthens the app), draft it to
+`applications/<id>/cover-letter.md` (plain markdown; a leading `# ...` title line is treated as
+an internal doc title and dropped from the PDF). Render a styled, one-page PDF with the shared
+template script — do NOT hand-roll pandoc/Chrome styling each time:
+
+```bash
+# Name is supplied at runtime (no PII in this repo — see AGENTS.md). Source it from the private
+# profile, e.g.: NAME=$(awk -F'|' '/Full name/{gsub(/ /,"",$3);print $3}' ~/workspace/jobs/profile.md)
+~/workspace/agent-tools/skills/job-search/scripts/make_cover_letter_pdf.sh \
+  applications/<id>/cover-letter.md \
+  "applications/<id>/Cover Letter - <Your Name> - <Role>.pdf" \
+  --name "<Your Name>" \
+  --subtitle "<tagline matching the tailored resume title>"
+```
+The script gives true 1in side / 0.5in top-bottom margins and roomy line spacing (it overrides
+pandoc's default `max-width`/padding, which otherwise reads as ~2in margins). Use a middle dot
+`·` (not a dash) in `--subtitle` to match the tailored resume title. `--name` is required (flag
+or `$JOB_SEARCH_APPLICANT_NAME`); the script bakes in no personal default.
+
 **Stage 5: Find Connections & Outreach Strategy**
 
 **READ `references/linkedin-safety.md` BEFORE THIS STAGE.**
@@ -273,7 +292,7 @@ Update tracker: `referral_contact` with top recommendation, `referral_status=ide
 
 **Stage 6: Finalize & Push**
 
-1. Verify all artifacts exist: `job-posting.md`, `glassdoor.md`, `company-research.md`, `application-form.md`, `application-responses.md`, `connections.md`, `Resume - Jack Senechal - <role>.pdf` in `applications/<id>/`
+1. Verify all artifacts exist: `job-posting.md`, `glassdoor.md`, `company-research.md`, `application-form.md`, `application-responses.md`, `connections.md`, `Resume - Jack Senechal - <role>.pdf` in `applications/<id>/` (plus `cover-letter.md` and its rendered PDF when a cover letter applies)
 2. Update tracker: `stage=ready_to_apply`
 3. Commit and push job-search repo:
    ```bash
@@ -453,7 +472,9 @@ with open('tracker.csv','w',newline='') as f:
 ## Application Form Defaults
 
 Personal details for pre-filling application forms live at `~/workspace/jobs/profile.md`.
-Read that file before filling any form. **NEVER put personal details in this skill file.**
+Read that file before filling any form. **NEVER put personal details anywhere in this public
+skill — not SKILL.md, not scripts, not assets** (see the repo `AGENTS.md`). Pass them in at
+runtime (flags / env / read from the private profile) instead.
 
 ### Form-Filling Strategy
 
@@ -478,4 +499,6 @@ Read that file before filling any form. **NEVER put personal details in this ski
 8. **Always push both repos** at the end of a pipeline run.
 9. **Draft application responses** for any written questions.
 10. **Never submit applications automatically.** Fill everything, then stop. User clicks Submit.
-11. **No PII in this skill file.** All personal details live in the private job-search repo.
+11. **No PII anywhere in this public skill** (SKILL.md, scripts, assets — the whole repo). All
+    personal details live in the private job-search repo (`~/workspace/jobs/`, incl. `profile.md`)
+    and are passed to scripts at runtime via flags or env vars. See the repo `AGENTS.md`.

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# tts — toggle agent-speak TTS on/off at runtime (works mid-session).
+#
+# The mute state is a flag file that agent-speak checks on every utterance,
+# so flipping it takes effect immediately without restarting any harness.
+# From a Claude Code prompt, run these with the `!` bash prefix: `!tts off`.
+#
+#   tts on        unmute (speak)
+#   tts off       mute (silent)
+#   tts toggle    flip
+#   tts status    show current state  (default if no arg)
+#   tts say TEXT  speak TEXT now (ignores mute), e.g. `tts say "build done"`
+set -euo pipefail
+
+MUTEFILE="${AGENT_SPEAK_MUTEFILE:-${XDG_STATE_HOME:-$HOME/.local/state}/agent-speak/muted}"
+mkdir -p "$(dirname "$MUTEFILE")"
+
+state() { [ -f "$MUTEFILE" ] && echo "off (muted)" || echo "on (speaking)"; }
+
+case "${1:-status}" in
+  on)     rm -f "$MUTEFILE";   echo "TTS: on (speaking)";;
+  off)    : > "$MUTEFILE";     echo "TTS: off (muted)";;
+  toggle) if [ -f "$MUTEFILE" ]; then rm -f "$MUTEFILE"; else : > "$MUTEFILE"; fi
+          echo "TTS: $(state)";;
+  status) echo "TTS: $(state)";;
+  say)    shift; printf '%s' "$*" \
+            | AGENT_SPEAK_MUTEFILE=/nonexistent "$(dirname "$(readlink -f "$0")")/agent-speak";;
+  *)      echo "usage: tts {on|off|toggle|status|say TEXT}" >&2; exit 2;;
+esac
