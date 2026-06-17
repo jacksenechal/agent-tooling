@@ -248,6 +248,28 @@ sys.stdout.write(("".join(deltas).strip()) or ((fallback or "").strip()))
 PY
 )"
 
+# Pull the last hard provider error out of the stream, if any. A 401/balance/quota/auth
+# failure arrives as an event with stopReason=="error" and an errorMessage — distinct from a
+# benign empty completion, and NOT something a retry will fix.
+STREAM_ERR="$(python3 - "$STREAM" <<'PY'
+import json, sys
+err = ""
+with open(sys.argv[1], "r", errors="replace") as fh:
+    for line in fh:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            ev = json.loads(line)
+        except Exception:
+            continue
+        m = ev.get("message") or {}
+        if m.get("stopReason") == "error" and m.get("errorMessage"):
+            err = m["errorMessage"]            # keep the last one seen
+sys.stdout.write(err.replace("\n", " ").strip())
+PY
+)"
+
 # Write the extracted answer (empty stays a true 0-byte file so callers' empty-check still works).
 if [ -n "$OUT" ]; then
   if [ -n "$ANSWER" ]; then printf '%s\n' "$ANSWER" >"$OUT"; else : >"$OUT"; fi
@@ -267,10 +289,30 @@ if [ $ec -eq 124 ]; then
     echo "pi-research: WORKER HIT HARD CAP after ${TIMEOUT}s (model=$MODEL) — recovered ${#ANSWER} chars partial${OUT:+ in $OUT}" >&2
   fi
 fi
-# Distinguish a true empty completion (no text at all) from a limit kill, and surface hidden errors.
-if [ -z "$ANSWER" ]; then
-  [ "$reason" = ok ] && reason=empty
-  echo "pi-research: WARNING empty answer (gateway empty-completion or error) — stream: $STREAM" >&2
+# Distinguish a true empty completion (no text at all) from a limit kill or a hard provider
+# error, and surface hidden errors. A provider error (billing/auth/quota) is reported as a
+# distinct reason with a NONZERO exit so callers don't waste a retry on something a retry can't
+# fix; a benign empty completion stays reason=empty exit=0 (retry is the right move there).
+if [ -z "$ANSWER" ] && [ "$reason" = ok ]; then
+  if [ -n "$STREAM_ERR" ]; then
+    case "$STREAM_ERR" in
+      # account-level failures a retry can't fix — a human must top up / re-auth.
+      *[Bb]alance*|*[Bb]illing*|401*|*[Uu]nauthorized*|403*|*[Ff]orbidden*|*[Ii]nsufficient*|*[Pp]ayment*|*[Qq]uota*)
+        reason=autherror; ec=3 ;;
+      # everything else (429 rate-limit, 5xx, overloaded, ...) is a transient/other provider
+      # error: caller reads the PROVIDER ERROR line and decides (429/5xx → retry w/ backoff).
+      *)
+        reason=error; ec=4 ;;
+    esac
+    echo "pi-research: PROVIDER ERROR (reason=$reason) — $STREAM_ERR" >&2
+  else
+    reason=empty
+    echo "pi-research: WARNING empty answer (gateway empty-completion) — stream: $STREAM" >&2
+  fi
+  [ -s "$ERRLOG" ] && { echo "pi-research: stderr tail:" >&2; tail -n 3 "$ERRLOG" >&2; }
+elif [ -z "$ANSWER" ]; then
+  # Empty but already classified (stall/hardcap): just warn, keep that reason+exit.
+  echo "pi-research: WARNING empty answer (stream: $STREAM)" >&2
   [ -s "$ERRLOG" ] && { echo "pi-research: stderr tail:" >&2; tail -n 3 "$ERRLOG" >&2; }
 fi
 echo "pi-research: done model=$MODEL exit=$ec reason=$reason elapsed=$((end-start))s answer_chars=${#ANSWER}${NAME:+ name=$NAME}${OUT:+ out=$OUT} stream=$STREAM" >&2

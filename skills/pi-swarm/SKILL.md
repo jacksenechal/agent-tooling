@@ -92,9 +92,13 @@ extracts the answer from that stream. Two consequences:
 
 It prints a `pi-research: done model=… exit=… reason=… elapsed=…s answer_chars=… stream=…` line
 to **stderr**. `reason=` classifies the outcome so you can pick a retry strategy:
-`ok` (clean), `stall` (watchdog killed a hung worker), `hardcap` (hit the `-t` ceiling), or
-`empty` (gateway returned no text). `answer_chars=0` flags a genuinely empty result (see
-validation below). A partial answer is recovered from the stream on both `stall` and `hardcap`.
+`ok` (clean, exit 0), `stall` (watchdog killed a hung worker, exit 124), `hardcap` (hit the `-t`
+ceiling, exit 124), `empty` (gateway returned no text but no error — a benign empty completion,
+exit 0, retry is the right move), `autherror` (provider rejected the call: 401/balance/quota/
+forbidden — exit 3, **retrying won't help, fix the account**), or `error` (some other hard
+provider error — exit 4). For `autherror`/`error` the actual provider `errorMessage` is printed
+on a `PROVIDER ERROR` line. `answer_chars=0` flags a genuinely empty result (see validation
+below). A partial answer is recovered from the stream on both `stall` and `hardcap`.
 
 ## Orchestration pattern
 
@@ -109,14 +113,57 @@ validation below). A partial answer is recovered from the stream on both `stall`
    for a retry pass. To tell *why* a task failed, check the `reason=` field on the stderr `done`
    line: `reason=stall` = worker hung (re-dispatch, or raise `-s` if it was a legitimately slow
    step), `reason=hardcap` = hit the `-t` ceiling (rare; raise `-t` only for a genuinely huge
-   task), `reason=empty` = a true gateway empty-completion (just retry). The `.jsonl` stream
-   holds the partial work in every case.
+   task), `reason=empty` = a true gateway empty-completion (just retry), `reason=autherror` =
+   provider rejected the call (401/balance/quota) — **do NOT retry the swarm; fix the account
+   first** (the `PROVIDER ERROR` line carries the gateway's message, e.g. a billing URL), and
+   `reason=error` = some other hard provider error (read the `PROVIDER ERROR` line, then decide:
+   429 rate-limit / 5xx / overloaded are transient → retry with backoff or on another model).
+   If *every* worker comes back `autherror`, stop and fix billing/auth before re-dispatching
+   anything — a retry pass will just burn time. The `.jsonl` stream holds the partial work in
+   every case.
 4. **Synthesize** the verified worker outputs into the final answer yourself. Treat worker
    findings as research notes from junior agents: cross-check sources, resolve conflicts, and
    own the conclusion.
 
-Keep a simple task ledger (a dir of `-o` files, or a TaskCreate/TaskUpdate list) so you know
-which tasks are pending / done / need retry.
+Keep a simple task ledger (a dir of `-o` files, or a `TaskCreate`/`TaskUpdate` list) so you know
+which tasks are pending / done / need retry. For anything beyond a handful of workers, drive the
+swarm through the harness Task ledger — see the next section.
+
+## Orchestrating via the Task ledger
+
+For a real fan-out (and so the user sees live progress), track each worker as a harness Task and
+model the synthesis step as a dependent task. The Task tools are the *orchestrator's* bookkeeping
+layer; the workers still run as background `pi-research.sh` calls. The two layers are linked by
+convention, not magic. This protocol is validated end-to-end.
+
+1. **Plan (Phase 0).** One `TaskCreate` per research item, plus one for synthesis. Then
+   `TaskUpdate <synthesis> addBlockedBy=[<each research id>]` so synthesis literally cannot start
+   until every worker lands. (`TaskList` first to avoid dupes.)
+2. **Fan out (Phase 1).** Per research task: `TaskUpdate status=in_progress`, launch the worker
+   as a background Bash `pi-research.sh ... -o results/<name>.txt -n swarm-<name>`, and name the
+   `-o` file after the task so the dir is self-describing.
+3. **Collect (Phase 2).** As each background task notifies completion (or `TaskOutput
+   task_id=<bg id> block=true` to wait on a specific one), validate and branch on `reason=`:
+   `ok` + `SOURCES:` present → `status=completed`; `empty` → retry (≤2 attempts, optionally
+   another model); `error` (429/5xx) → retry with backoff; `autherror` → **halt the swarm, tell
+   the user to fix billing/auth**, do not retry. Run `scripts/pi-swarm-collect.sh results/` for a
+   one-shot table (reason / chars / SOURCES / suggested action) across the whole dir instead of
+   grepping each file.
+4. **Synthesize (Phase 3).** Completing the research tasks auto-unblocks synthesis. `TaskUpdate
+   <synthesis> status=in_progress`, read the verified `-o` files, write the final answer yourself,
+   `status=completed`.
+
+**Gotchas learned from running this:**
+- **Task `metadata` is write-only for display.** `TaskGet`/`TaskList` render status, description,
+  and blocks/blockedBy but *not* metadata. Storing `bg_task_id`/`model`/`out` in metadata is
+  harmless but you can't read it back — keep the real source of truth in the `-o` filenames and
+  the live background-task notifications, not the ledger.
+- **The ledger is a live working set, not an audit log.** Once all tasks are `completed`,
+  `TaskList` shows "No tasks found." Don't rely on it for history; the results dir is the record.
+- **`reason=` precedence.** The wrapper's stderr `done` line is authoritative (it knows the exit
+  code, so it alone reports `stall`/`hardcap`). `pi-swarm-collect.sh` derives a best-effort reason
+  from the result files only, and flags a worker whose stream lacks `agent_end` as `truncated?`
+  so a killed-mid-run partial isn't mistaken for a clean finish.
 
 ## Writing worker prompts
 
