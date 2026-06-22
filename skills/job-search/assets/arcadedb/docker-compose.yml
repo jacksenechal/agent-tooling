@@ -9,7 +9,10 @@ services:
       - arcadedb-data:/home/arcadedb/databases
     environment:
       - JAVA_OPTS=-Darcadedb.server.rootPassword=playwithdata
-    restart: unless-stopped
+    # "no" (not unless-stopped): the skill starts this on demand and an idle
+    # timer stops it, so it should not auto-resurrect on reboot or after a stop.
+    # See scripts/arcadedb_ctl.sh.
+    restart: "no"
 
 volumes:
   arcadedb-data:

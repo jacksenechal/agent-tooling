@@ -9,8 +9,19 @@ Run from your job-search repo root (or any directory — no relative paths neede
 
 import os
 import requests
+import subprocess
 import sys
 from requests.auth import HTTPBasicAuth
+
+
+def ensure_arcadedb():
+    """Start the ArcadeDB container on demand and refresh its idle heartbeat."""
+    ctl = os.path.join(os.path.dirname(os.path.abspath(__file__)), "arcadedb_ctl.sh")
+    try:
+        subprocess.run(["bash", ctl, "ensure"], check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"Warning: could not ensure ArcadeDB is running ({e}).", file=sys.stderr)
+
 
 ARCADE_HOST = os.environ.get("ARCADE_HOST", "localhost")
 ARCADE_PORT = int(os.environ.get("ARCADE_PORT", 2480))
@@ -48,6 +59,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     company = sys.argv[1]
+    ensure_arcadedb()
     results = query_company(company)
 
     if results:

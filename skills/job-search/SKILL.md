@@ -325,7 +325,13 @@ Read `references/knowledge-graph.md` for full setup, ingestion, and query guidan
 - `kg setup` — Start ArcadeDB and run first ingestion
 - `kg ingest` — Re-ingest after a new LinkedIn export: `python3 ~/workspace/agent-tools/skills/job-search/scripts/ingest_linkedin.py --me-name "Your Name"`
 - `kg query <company>` — Query warmth scores: `python3 ~/workspace/agent-tools/skills/job-search/scripts/query_connections.py "<Company>"`
-- `kg status` — Check if ArcadeDB is running and populated
+- `kg status` — Check container/heartbeat/idle-timer state: `~/workspace/agent-tools/skills/job-search/scripts/arcadedb_ctl.sh status`
+- `kg stop` — Stop ArcadeDB now: `~/workspace/agent-tools/skills/job-search/scripts/arcadedb_ctl.sh stop`
+
+The `ingest`/`query` scripts start the container on demand and refresh an idle
+heartbeat, so do NOT run `docker compose up` by hand. An idle-reaper systemd timer
+stops the 2GB-heap container after 3h of no use, so it never gets left running.
+See `references/knowledge-graph.md` → "Lifecycle".
 
 ### `status` — View pipeline
 

@@ -3,13 +3,42 @@
 A local ArcadeDB graph database that models LinkedIn connections, work history, and message
 history into warmth-ranked scores — so you can quickly identify who to ask for a referral.
 
+## Lifecycle (start-on-demand + idle auto-stop)
+
+The container holds a ~2GB JVM heap, so it is **not** left running. `scripts/arcadedb_ctl.sh`
+manages it:
+
+- The `ingest_linkedin.py` and `query_connections.py` scripts call `arcadedb_ctl.sh ensure`
+  automatically — it starts the container if needed, waits until the REST API is ready, and
+  refreshes an idle heartbeat (`~/.cache/job-search/arcadedb-last-use`). **Do not run
+  `docker compose up` by hand.**
+- On first use, `ensure` installs a **systemd user timer**
+  (`job-search-arcadedb-reap.timer`, every 15 min) that runs `arcadedb_ctl.sh reap`. Reap
+  stops the container once it has been idle for `JOB_SEARCH_ARCADEDB_IDLE` seconds
+  (default **10800 = 3h**). This is decoupled from Claude: it reaps the container no matter
+  who or what started it.
+- `restart: "no"` in the compose file means a reboot will not resurrect it.
+
+Manual controls:
+
+```bash
+CTL=~/workspace/agent-tools/skills/job-search/scripts/arcadedb_ctl.sh
+$CTL status         # container + heartbeat + timer state
+$CTL ensure         # start now (rarely needed; the scripts do this)
+$CTL stop           # stop now
+$CTL install-timer  # reinstall/enable the idle-reaper timer (idempotent)
+```
+
+Override the idle window per-invocation, e.g. `JOB_SEARCH_ARCADEDB_IDLE=21600 $CTL reap` (6h).
+
 ## Setup
 
 ### 1. Start ArcadeDB
 
+The ingest step below starts it for you. To start manually:
+
 ```bash
-cd ~/workspace/agent-tools/skills/job-search/assets/arcadedb
-docker compose up -d
+~/workspace/agent-tools/skills/job-search/scripts/arcadedb_ctl.sh ensure
 ```
 
 Verify: `curl -s http://localhost:2480/api/v1/server -u root:playwithdata`

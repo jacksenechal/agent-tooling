@@ -15,8 +15,19 @@ import requests
 import math
 import os
 import io
+import subprocess
+import sys
 from datetime import datetime
 from requests.auth import HTTPBasicAuth
+
+
+def ensure_arcadedb():
+    """Start the ArcadeDB container on demand and refresh its idle heartbeat."""
+    ctl = os.path.join(os.path.dirname(os.path.abspath(__file__)), "arcadedb_ctl.sh")
+    try:
+        subprocess.run(["bash", ctl, "ensure"], check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"Warning: could not ensure ArcadeDB is running ({e}).", file=sys.stderr)
 
 # ArcadeDB configuration
 ARCADE_HOST = os.environ.get("ARCADE_HOST", "localhost")
@@ -284,6 +295,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    ensure_arcadedb()
     setup_schema()
     clear_data()
     ingest_data(args.me_name, args.data_dir)
