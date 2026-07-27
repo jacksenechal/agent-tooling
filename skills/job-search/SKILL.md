@@ -3,10 +3,13 @@ name: job-search
 description: >
   Job application pipeline management. Process LinkedIn job URLs, tailor resumes,
   prep applications, find referral connections, and track pipeline status.
-  Includes LinkedIn connection knowledge graph (ArcadeDB) for warmth-ranked outreach.
+  Includes LinkedIn connection knowledge graph (ArcadeDB) for warmth-ranked outreach,
+  and a scheduled orchestrator loop that scans saved-job lists daily and checks posting
+  liveness weekly.
   Triggers on: job URLs, "apply to", "tailor resume for", "find connections at",
   "job tracker", "application status", "job search", "knowledge graph", "warmth score",
-  "ingest linkedin", or any job pipeline tasks.
+  "ingest linkedin", "saved jobs", "scan bookmarks", "still open", "orchestrator loop",
+  or any job pipeline tasks.
 ---
 
 # Job Search Pipeline Skill
@@ -328,10 +331,57 @@ Update tracker: `referral_contact` with top recommendation, `referral_status=ide
 
    Files to review before applying:
    - applications/<id>/application-responses.md              (edit your written answers)
-   - jobs/<id>/Resume - Jack Senechal - <role>.pdf   (ready to upload)
+   - jobs/<id>/Resume - <Your Name> - <role>.pdf   (ready to upload)
 
    Both repos pushed to GitHub — resume from any device with /job-search sync
    ```
+
+### `discover` — Daily saved-list scan (orchestrator)
+
+Read `references/orchestrator-loop.md` first. Normally invoked by a systemd timer, not by hand.
+
+1. Read `~/workspace/jobs/sources.json`. For each `enabled` source, spawn a subagent to scrape
+   the saved-jobs list via `mcp__playwright-golden__*` (`haiku` for Indeed, `sonnet` for
+   LinkedIn per its safety protocol). Return the list verbatim with each job's site key.
+2. Diff against `tracker.csv` on `(source, key)` parsed from the `url` column. Never dedup on
+   company + title: two distinct postings can share a title.
+3. For each new job: append at `stage=discovered`, then run Stage 1 research and advance to
+   `stage=researched`. Synthesize the fit assessment **on the main thread (Opus)**.
+4. If more than 8 new jobs appear in one run, research the 8 with the strongest surface fit,
+   leave the rest at `discovered`, and **say so explicitly** in the summary. Never silently cap.
+5. Commit and push the jobs repo. Append a run line to `orchestrator.log`.
+6. Print a one-screen summary: jobs added, fit read on each, obvious misfits worth pruning.
+
+### `liveness` — Weekly liveness sweep + saved-list sync (orchestrator)
+
+Read `references/orchestrator-loop.md` first. Normally invoked by a systemd timer.
+
+1. **Liveness.** For each tracker row in a pre-application stage (`discovered` through
+   `ready_to_apply`), fetch the posting and look for **explicit on-page closure text** ("no
+   longer accepting applications", "position has been filled", "posting has expired").
+   - Closure text found → `stage=closed`, record the phrase and date in `notes`.
+   - Loads normally → no change; clear any inconclusive counter.
+   - 404 / timeout / redirect / unparseable → **inconclusive**. Increment a counter in
+     `notes`, leave `stage` untouched, retry next week. Never archive on a status code.
+   - Inconclusive 4 weeks running → surface in the summary for a human decision, still no
+     auto-archive.
+   - Rows at `applied` or beyond are skipped entirely.
+2. **Sync.** Reconcile each writable source's saved list to match the tracker (mapping table in
+   `orchestrator-loop.md`). Rows at `rejected` / `withdrawn` / `closed` get archived on the
+   source site. **LinkedIn writes are governed by `linkedin-safety.md` §7**: archive/un-save
+   only, max 10 per session counting double against the page budget, abort to read-only on any
+   anomaly. If more than 10 need syncing, do 10 and leave the rest for next week.
+3. Commit and push. Append a run line to `orchestrator.log`.
+4. Print a summary: closed, still open, inconclusive, sync writes performed.
+
+### `watch setup` — Install the orchestrator timers
+
+1. Create `~/workspace/jobs/sources.json` if absent (template in `references/orchestrator-loop.md`).
+2. Run `~/workspace/agent-tools/skills/job-search/scripts/install-orchestrator.sh`, which
+   installs and enables the systemd user timers. `--uninstall` reverses it.
+3. Verify with `systemctl --user list-timers 'job-search-*'`.
+4. Tell the user about `loginctl enable-linger $USER` if they want timers to fire while logged
+   out, and that a sleeping machine runs missed jobs on wake (`Persistent=true`).
 
 ### `kg` — Knowledge graph operations
 
@@ -521,6 +571,8 @@ runtime (flags / env / read from the private profile) instead.
 8. **Always push both repos** at the end of a pipeline run.
 9. **Draft application responses** for any written questions.
 10. **Never submit applications automatically.** Fill everything, then stop. User clicks Submit.
+    This holds for the unattended orchestrator loop too: its authority ends at discovery,
+    research, tracker state, and saved-list bookkeeping.
 11. **No PII anywhere in this public skill** (SKILL.md, scripts, assets — the whole repo). All
     personal details live in the private job-search repo (`~/workspace/jobs/`, incl. `profile.md`)
     and are passed to scripts at runtime via flags or env vars. See the repo `AGENTS.md`.

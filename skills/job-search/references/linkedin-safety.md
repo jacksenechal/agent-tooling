@@ -49,17 +49,42 @@ Between LinkedIn page loads, navigate to a non-LinkedIn URL:
 
 This breaks up repetitive linkedin.com access patterns in the browser history.
 
-### 7. No Write Actions — EVER
-Never automate ANY of these on LinkedIn:
+### 7. Write Actions — Forbidden, With One Narrow Exception
+
+**Permanently forbidden. Never automate ANY of these:**
 - Sending connection requests
 - Sending messages or InMail
-- Clicking "Easy Apply"
-- Endorsing skills
+- Clicking "Easy Apply" or submitting any application
+- Endorsing skills or writing recommendations
 - Liking, commenting, or sharing posts
-- Following companies or people
-- Any action that modifies LinkedIn state
+- Following or unfollowing companies or people
+- Editing the user's own profile
+- Anything that touches the social graph or is visible to another person
 
-These are ALWAYS done manually by the user.
+These are ALWAYS done manually by the user. No exceptions, no "just this once."
+
+**The one exception — the user's own saved-jobs list.** The pipeline orchestrator may
+archive or un-save entries in *the user's own* saved-jobs list (`My Items → My Jobs`) to
+keep it in sync with `tracker.csv`. This was deliberately authorized by the user on
+2026-07-27 to enable the sync loop.
+
+Why this is materially different from everything above: it is private bookkeeping on the
+user's own saved items. Nothing is published, nothing reaches another person's notifications,
+and nothing touches the social graph — which is what LinkedIn's abuse detection is primarily
+built to catch. It is not risk-free, so it is fenced:
+
+- **Only** archive / un-save / restore on the saved-jobs list. Nothing else on the page.
+- **Max 10 write actions per session**, and they count double against the 25-page budget
+  (each write = 2 page loads).
+- Full §4 and §5 treatment on every write: randomized delay, natural scroll, breather page.
+- **Never bulk-clear.** If more than 10 entries need syncing, do 10 and leave the rest for
+  the next run.
+- On ANY anomaly (§8 CAPTCHA, unexpected dialog, layout you don't recognize), abort the
+  write immediately and fall back to read-only for the rest of the session.
+- Every write is logged to the §10 audit trail with the job id and the action taken.
+
+If in doubt, don't write. A stale saved list is a trivial problem; a restricted LinkedIn
+account is not.
 
 ### 8. CAPTCHA / Unusual Activity Detection
 If a `browser_snapshot` or `browser_screenshot` reveals:

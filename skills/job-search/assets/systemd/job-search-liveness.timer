@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly timer for job search liveness + sync
+
+[Timer]
+OnCalendar=Sun *-*-* 10:00:00
+RandomizedDelaySec=10800
+Persistent=true
+
+[Install]
+WantedBy=timers.target

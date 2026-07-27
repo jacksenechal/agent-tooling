@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily timer for job search discovery
+
+[Timer]
+OnCalendar=*-*-* 09:00:00
+RandomizedDelaySec=5400
+Persistent=true
+
+[Install]
+WantedBy=timers.target

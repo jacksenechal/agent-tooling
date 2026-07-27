@@ -36,6 +36,13 @@ Ordered progression:
 9. `offer` — Received an offer (terminal)
 10. `rejected` — Application rejected (terminal)
 11. `withdrawn` — User withdrew application (terminal)
+12. `closed` — Posting taken down before applying (terminal)
+
+`closed` is set by the weekly liveness sweep and means only that the job listing disappeared,
+not that anyone said no. It is distinct from `rejected` (they declined) and `withdrawn` (the
+user pulled out). It is only ever applied to rows in a pre-application stage, and only on
+explicit on-page closure text — never on a 404, timeout, or redirect. See
+`orchestrator-loop.md`.
 
 ## CSV Handling Rules
 

@@ -1,0 +1,12 @@
+[Unit]
+Description=Job search pipeline: daily discovery (scan saved-job sources, research, tracker sync)
+
+# JOBS_DIR defaults to $HOME/workspace/jobs; override with an Environment= line here if needed,
+# e.g. Environment=JOBS_DIR=%h/workspace/jobs-alt
+
+[Service]
+Type=oneshot
+ExecStart=%h/workspace/agent-tools/skills/job-search/scripts/orchestrator.sh discover
+# Type=oneshot inherits DefaultTimeoutStartSec (commonly 90s), which would kill a run
+# mid-research. Allow up to 2h; the lockfile prevents overlap if one truly hangs.
+TimeoutStartSec=7200
