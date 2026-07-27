@@ -43,9 +43,26 @@ Offload it to subagents; keep the main thread for synthesis, resume tailoring, r
 drafting, and decisions.
 
 **All research runs as Claude subagents via the Agent tool.** Spawn them in parallel — several
-Agent calls in a single message — and synthesize their returns on the main thread. Model
-selection follows the usual rule: `haiku` for single-page extraction, `sonnet` for multi-step
-work or anything needing judgment.
+Agent calls in a single message — and synthesize their returns on the main thread.
+
+### Model selection
+
+Match the model to the *kind* of thinking the task needs, not its length:
+
+| Model | Use for | Examples in this pipeline |
+|---|---|---|
+| `haiku` | Mechanical extraction. One page, known fields, return verbatim. | Job posting scrape, Glassdoor capture, application form enumeration |
+| `sonnet` | Multi-step execution and clean prose. Follows a protocol carefully, writes well. | LinkedIn connection search, drafting a section from supplied facts |
+| `opus` | Real thinking: strategy, judgment, tradeoffs, anything where being *wrong* is worse than being *slow*. | Fit assessment, outreach strategy, resume tailoring decisions, cover-letter angle |
+
+The distinction that matters: **Sonnet writes well but does not reason deeply.** Give it
+facts and a shape and it produces good prose. Do not give it a decision that requires weighing
+competing considerations, reading between the lines of a job description, or judging whether a
+role is actually a good fit — that work goes to Opus, or stays on the main thread.
+
+Default to keeping strategic work on the main thread (already Opus). Spawn an explicit `opus`
+subagent only when the analysis needs its own large context, e.g. reading a full application
+history before drafting.
 
 ### Public web research (no login required)
 
@@ -208,6 +225,11 @@ Walk through the full pipeline for a new job posting end-to-end.
 
 **Stage 4: Draft Application Responses**
 
+Do this on the main thread (Opus) or an explicit `opus` subagent — never sonnet. Choosing what
+to claim, which narrative to lead with, and how to handle a weak spot honestly is judgment
+work, and a fluent wrong answer here is worse than no draft. Sonnet may be handed a settled
+angle to polish, but not the decision of what the angle is.
+
 For any written questions or essays identified in Stage 3:
 
 1. Read `applications/<id>/application-form.md`, `applications/<id>/job-posting.md`, `applications/<id>/glassdoor.md`, tailored `resume.md`, and `~/workspace/resume/CONTEXT.md`
@@ -239,8 +261,10 @@ or `$JOB_SEARCH_APPLICANT_NAME`); the script bakes in no personal default.
 
 #### Step 1: Search connections via a **sonnet subagent**
 
-Use `sonnet` (not haiku) for LinkedIn — the safety protocol requires careful multi-step
-judgment that haiku may not handle reliably.
+Use `sonnet` (not haiku) for LinkedIn — the safety protocol is multi-step and stateful (page
+budgets, randomized waits, breather navigations, CAPTCHA bailout) and haiku follows it
+unreliably. This is careful protocol execution, not strategy: the subagent only gathers the
+person list. All ranking and outreach strategy happens in Step 4 on the main thread.
 
 Spawn an Agent (model: sonnet) with the task:
 > "Search LinkedIn for connections at `<Company>`. Read `references/linkedin-safety.md` first and follow the protocol exactly. Use this URL:
