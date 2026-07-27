@@ -39,43 +39,39 @@ do file uploads. See `references/browser-setup.md` for fallback setup instructio
 ## Research Routing
 
 Research is mechanical work that consumes context and doesn't benefit from expensive models.
-Offload it; keep the main thread for synthesis, resume tailoring, response drafting, and
-decisions. There are two lanes — route every research task to the correct one.
+Offload it to subagents; keep the main thread for synthesis, resume tailoring, response
+drafting, and decisions.
 
-**Decision rule**: *Does the task need a logged-in session, or will the site ban a fresh
-automated browser?* → **Yes: Lane B (playwright-docker).** → **No: Lane A (pi-swarm).**
+**All research runs as Claude subagents via the Agent tool.** Spawn them in parallel — several
+Agent calls in a single message — and synthesize their returns on the main thread. Model
+selection follows the usual rule: `haiku` for single-page extraction, `sonnet` for multi-step
+work or anything needing judgment.
 
-### Lane A — `pi-swarm` (default for all public web research)
+### Public web research (no login required)
 
-For any research that does NOT require login and won't get you banned: company background,
-news, funding, products, engineering blog/culture, tech stack, salary benchmarks, public
-interview-process intel, and any batch of similar lookups. Fan out cheap, sandboxed `pi`
-workers **in parallel** — fast, highly parallel, and saves Claude's context/tokens.
+Company background, news, funding, products, engineering blog/culture, tech stack, salary
+benchmarks, public interview-process intel, and any batch of similar lookups. Give each
+subagent one topic, `WebSearch`/`WebFetch`, and a requirement to end with a `SOURCES:` block
+listing every URL it opened. Validate each return (non-empty + has `SOURCES:`) and
+re-dispatch anything that came back thin.
 
-Invoke via the `pi-swarm` skill's wrapper, one background process per task:
-```bash
-~/workspace/agent-tools/skills/pi-swarm/scripts/pi-research.sh \
-  -t 180 -o /tmp/<id>-<topic>.txt -n <id>-<topic> \
-  "Self-contained task. Be concise. End with a line 'SOURCES:' listing every URL you opened."
-```
-Launch several at once, `wait`, then read each `-o` file. **Validate** each (non-empty + has a
-`SOURCES:` block); re-dispatch any empty/flaky one (the free gateway occasionally returns
-empty), optionally on a different model. Synthesize the verified outputs on the main thread.
+### Authenticated / ban-prone browsing (`playwright-docker`)
 
-### Lane B — `playwright-docker` (sensitive / authenticated / ban-prone browsing)
-
-Use the Dockerized Playwright browser via an Agent subagent for anything that needs a
-logged-in session or aggressively bans automation: **LinkedIn** (job postings, connection
-search), **Glassdoor**, and **application form discovery + filling** (the persistent session
-and file uploads live here). **Never send these to pi-swarm** — its sandbox spins up fresh,
-unauthenticated browsers that trip bot detection and risk your accounts.
+Anything that needs a logged-in session or aggressively bans automation: **LinkedIn** (job
+postings, connection search), **Glassdoor**, **Indeed**, and **application form discovery +
+filling** (the persistent session and file uploads live here).
 
 **Pattern**: spawn a `haiku` subagent (or `sonnet` for multi-step LinkedIn work) via the
-Agent tool. Give it: the URL(s), exact fields to extract, and a requirement to return
-verbatim text — no summarization. CAPTCHA = STOP. The main thread does all writing.
+Agent tool, instructing it to use the `mcp__playwright-golden__*` tools. Give it: the URL(s),
+exact fields to extract, and a requirement to return verbatim text — no summarization.
+CAPTCHA = STOP. The main thread does all writing.
 
-Lane B stages: **1** (job posting + Glassdoor), **3** (form discovery), **5** (LinkedIn
-connection search). Lane A stages: **1** (broad public company research).
+Never point a fresh, unauthenticated browser at these sites — it trips bot detection and
+risks the user's accounts. Use the golden (persistent-login) session.
+
+Stages needing the authenticated browser: **1** (job posting + Glassdoor), **3** (form
+discovery), **5** (LinkedIn connection search). Stage **1** also includes broad public
+company research, which needs no browser session.
 
 ## Knowledge Graph
 
@@ -145,26 +141,21 @@ Walk through the full pipeline for a new job posting end-to-end.
      <What to emphasize in cover letter/interviews based on what employees value;
       what concerns to probe during interviews>
      ```
-   (Glassdoor stays in Lane B — it bans fresh automated browsers — so keep it on
-   playwright-docker, not pi-swarm.)
-7. **Broad company research via `pi-swarm`** (Lane A — public sources, parallel). Fan out
-   several cheap workers at once to enrich the application. Good angles (skip any already
-   covered by Glassdoor):
+   (Glassdoor bans fresh automated browsers, so it stays on the authenticated
+   playwright-golden session.)
+7. **Broad company research via parallel subagents** (public sources, no browser session
+   needed). Fan out several `haiku` subagents at once to enrich the application. Good angles
+   (skip any already covered by Glassdoor):
    - recent company news, funding, and trajectory
    - what the team/product does and the tech stack (from the company site, eng blog, GitHub)
    - engineering culture and values (the company's own sources, not Glassdoor)
    - role-specific context worth knowing for the cover letter and interviews
-   Launch them in parallel, each writing to its own temp file with a `SOURCES:` requirement:
-   ```bash
-   PI=~/workspace/agent-tools/skills/pi-swarm/scripts/pi-research.sh
-   "$PI" -t 180 -o /tmp/<id>-news.txt  -n <id>-news  "..." &
-   "$PI" -t 180 -o /tmp/<id>-stack.txt -n <id>-stack "..." &
-   "$PI" -t 180 -o /tmp/<id>-eng.txt   -n <id>-eng   "..." &
-   wait
-   ```
-   Validate each output (non-empty + has `SOURCES:`), re-dispatch any empties, then synthesize
-   into `applications/<id>/company-research.md` (sections per angle + a "Takeaways for
-   Application" block). Prefer this over burning main-thread context on public web research.
+   Spawn them as multiple Agent calls in a single message so they run concurrently. Give each
+   one angle, `WebSearch`/`WebFetch`, and a requirement to end with a `SOURCES:` block listing
+   every URL it opened. Validate each return (non-empty + has `SOURCES:`), re-dispatch anything
+   thin, then synthesize into `applications/<id>/company-research.md` (sections per angle + a
+   "Takeaways for Application" block). Prefer this over burning main-thread context on public
+   web research.
 8. Update tracker: `company`, `role`, `application_url`, `stage=researched`
 
 **Stage 2: Tailor Resume**
@@ -494,10 +485,11 @@ runtime (flags / env / read from the private profile) instead.
 
 1. **Run end-to-end without pausing.** The user reviews everything after the pipeline completes.
 2. **CAPTCHA = STOP.** If any `browser_snapshot` or `browser_screenshot` reveals a CAPTCHA, security challenge, "unusual activity" warning, or bot-detection interstitial on ANY site (LinkedIn, Glassdoor, Greenhouse, Lever, Workday, etc.): immediately stop all browser automation, navigate to `google.com`, and ask the user to resolve it via noVNC (http://localhost:6080/vnc.html). Wait for confirmation before resuming. Never attempt to solve or bypass a captcha. This is the ONE exception to "run without pausing."
-3. **Route research correctly (see "Research Routing").** Public web research → `pi-swarm`
-   (Lane A), parallelized and cheap. LinkedIn, Glassdoor, and application forms → `playwright-docker`
-   (Lane B). **Never send authenticated or ban-prone sites to pi-swarm** — its fresh,
-   unauthenticated sandbox browsers will trip bot detection and risk your accounts.
+3. **Route research correctly (see "Research Routing").** All research runs as Claude
+   subagents via the Agent tool, spawned in parallel. LinkedIn, Glassdoor, Indeed, and
+   application forms additionally need the authenticated `playwright-golden` session.
+   **Never point a fresh, unauthenticated browser at those sites** — it trips bot detection
+   and risks the user's accounts.
 4. **LinkedIn safety is non-negotiable.** Read `references/linkedin-safety.md` before any LinkedIn browsing.
 5. **Never automate** connection requests, messages, or application submissions on LinkedIn.
 6. **Always read `resume/CONTEXT.md`** before modifying resume content.
