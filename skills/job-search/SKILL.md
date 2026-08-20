@@ -1,15 +1,11 @@
 ---
 name: job-search
 description: >
-  Job application pipeline management. Process LinkedIn job URLs, tailor resumes,
-  prep applications, find referral connections, and track pipeline status.
-  Includes LinkedIn connection knowledge graph (ArcadeDB) for warmth-ranked outreach,
-  and a scheduled orchestrator loop that scans saved-job lists daily and checks posting
-  liveness weekly.
-  Triggers on: job URLs, "apply to", "tailor resume for", "find connections at",
-  "job tracker", "application status", "job search", "knowledge graph", "warmth score",
-  "ingest linkedin", "saved jobs", "scan bookmarks", "still open", "orchestrator loop",
-  or any job pipeline tasks.
+  Job application pipeline: process LinkedIn job URLs, tailor resumes, rank referral
+  connections by warmth from an ArcadeDB knowledge graph, track application status, and
+  run a scheduled orchestrator over saved-job lists. Trigger on job URLs, "apply to",
+  "tailor resume for", "find connections at", "job tracker", or "job search". Full trigger
+  list under "When To Use This".
 ---
 
 # Job Search Pipeline Skill
@@ -19,6 +15,16 @@ workflow from LinkedIn job URL to ready-to-apply state.
 
 **Run the entire pipeline end-to-end without stopping for user confirmation.** The user
 will review artifacts after the run completes.
+
+## When To Use This
+
+Any job-pipeline task. Beyond the phrases in the description, this also covers:
+"application status", "knowledge graph", "warmth score", "ingest linkedin", "saved jobs",
+"scan bookmarks", "still open", and "orchestrator loop".
+
+The orchestrator runs on timers rather than on request: a daily scan of saved-job lists
+(`discover`) and a weekly posting-liveness sweep plus saved-list sync (`liveness`). See
+those sub-commands below, and `watch setup` to install the timers.
 
 ## Project Locations
 

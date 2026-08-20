@@ -1,19 +1,11 @@
 ---
 name: repo-scout
 description: >
-  Rapid codebase situational awareness. Produces a structured ~4-page report with Mermaid
-  diagrams covering topology, tech stack, domain vocabulary, entry points, golden-path
-  trace, deploy pipeline, architecture sketch, data model, code conventions, trust
-  boundaries, risk hotspots, and observability.
-
-  Use this skill whenever you need a fast structural overview of an unfamiliar codebase —
-  onboarding to a new team, preparing for a pair coding interview, reviewing a project
-  you haven't seen before, doing technical due diligence. Trigger on: "scout this repo",
-  "repo overview", "codebase overview", "walk me through this repo", "give me the lay of
-  the land", "what am I looking at", "architecture overview", "structural analysis",
-  "help me understand this project", "onboard me to this codebase", "first look at this
-  code", "repo-scout", "code tour". Also trigger when the user opens a new repo and asks
-  broad orientation questions like "where do I start" or "how is this organized".
+  Rapid situational awareness for an unfamiliar codebase. Produces a structured ~4-page
+  report with Mermaid diagrams covering topology, stack, entry points, a golden-path trace,
+  architecture, data model, trust boundaries, and risk hotspots. Trigger on "scout this
+  repo", "codebase overview", "give me the lay of the land", "onboard me to this codebase",
+  or broad orientation questions about a repo the user has just opened.
 ---
 
 # Repo Scout
@@ -22,6 +14,19 @@ Rapid situational awareness for an experienced developer sitting down cold with 
 unfamiliar codebase. The report forms the trunk of a knowledge tree — enough to orient,
 ask good questions, and know where to dig deeper. Not a deep review or audit; a fast,
 consumable structural analysis.
+
+## When To Use This
+
+A fast structural overview when sitting down cold with a codebase: onboarding to a new
+team, prepping for a pair-coding interview, reviewing a project for the first time, or
+technical due diligence.
+
+Beyond the trigger phrases in the description, this also fits broad orientation questions
+asked against a freshly opened repo, such as "where do I start", "how is this organized",
+"what am I looking at", "walk me through this repo", or a request for a code tour.
+
+Not a deep review or audit. For semantic questions about specific behaviour, use
+semi-formal-code-reasoning instead.
 
 ## Arguments
 

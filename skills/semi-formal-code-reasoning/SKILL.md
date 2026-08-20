@@ -1,22 +1,11 @@
 ---
 name: semi-formal-code-reasoning
 description: >
-  Deep semantic code analysis using semi-formal structured reasoning without executing code.
-  Uses certificate templates requiring explicit premises, execution path tracing, and formal
-  conclusions — preventing the failure mode of guessing semantics from function names.
-
-  Always use for: code review, patch equivalence (do these diffs produce the same test
-  outcomes?), fault localization (which lines cause this test to fail?), code QA (nuanced
-  questions about codebase semantics or behavior).
-
-  Also trigger when: a previous fix attempt failed without clear diagnosis; reasoning
-  involves third-party library internals or framework hooks; failing test and suspected bug
-  are in different modules; behavior requires tracing 3+ files; code may shadow builtins
-  (format, type, open, etc.); multiple inheritance or generics; security or data-integrity
-  code; refactoring verification; user is surprised by unexpected behavior.
-
-  Skip for simple questions answerable from a single file or when a stack trace directly
-  names the cause.
+  Deep semantic code analysis without executing code, using certificate templates that
+  require explicit premises, execution-path tracing, and formal conclusions. Prevents
+  guessing semantics from function names. Use for code review, patch equivalence, fault
+  localization, and nuanced questions about codebase behavior. See "When To Use This" for
+  the full trigger and skip conditions.
 ---
 
 # Semi-formal Code Reasoning
@@ -27,6 +16,27 @@ mode of guessing semantics from function names or making unsupported equivalence
 
 **Key principle:** Gather evidence first, conclude last. The structured template acts as
 a certificate — you cannot skip cases or make unsupported claims.
+
+## When To Use This
+
+Always use for: code review; patch equivalence (do these diffs produce the same test
+outcomes?); fault localization (which lines cause this test to fail?); code QA (nuanced
+questions about codebase semantics or behavior).
+
+Also reach for it when:
+
+- a previous fix attempt failed without a clear diagnosis
+- reasoning involves third-party library internals or framework hooks
+- the failing test and the suspected bug are in different modules
+- the behaviour requires tracing three or more files
+- code may shadow builtins (`format`, `type`, `open`, ...)
+- multiple inheritance or generics are involved
+- it is security or data-integrity code
+- verifying a refactor preserved behaviour
+- the user is surprised by unexpected behaviour
+
+Skip it for questions answerable from a single file, or when a stack trace already names
+the cause.
 
 ## Task Selection
 
