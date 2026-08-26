@@ -239,6 +239,16 @@ to claim, which narrative to lead with, and how to handle a weak spot honestly i
 work, and a fluent wrong answer here is worse than no draft. Sonnet may be handed a settled
 angle to polish, but not the decision of what the angle is.
 
+**Any text the user will send verbatim must be immediately copy-pasteable.** This covers
+application answers, cover letters, outreach messages, and recruiter replies. Two hard rules:
+
+- **No blockquote (`>`) indentation on the draft itself.** Quoting it into a markdown blockquote
+  makes the user strip a `> ` from every line before sending. Put the draft in a plain section
+  under a heading, or in a fenced code block. Commentary about the draft goes outside it.
+- **No hard-wrapped lines inside the draft.** Let sentences and paragraphs run long on one line.
+  Hard wraps at 80-100 chars survive the paste into Gmail/LinkedIn as ragged line breaks.
+  (Hard wrapping is still correct for the surrounding prose in these docs, just not the draft.)
+
 For any written questions or essays identified in Stage 3:
 
 1. Read `applications/<id>/application-form.md`, `applications/<id>/job-posting.md`, `applications/<id>/glassdoor.md`, tailored `resume.md`, and `~/workspace/resume/CONTEXT.md`
@@ -575,7 +585,9 @@ runtime (flags / env / read from the private profile) instead.
 6. **Always read `resume/CONTEXT.md`** before modifying resume content.
 7. **Use `_publish`** after every resume edit, and commit the generated artifacts.
 8. **Always push both repos** at the end of a pipeline run.
-9. **Draft application responses** for any written questions.
+9. **Draft application responses** for any written questions. Anything the user sends verbatim
+    (application answers, cover letters, outreach replies) must be copy-pasteable as-is: no `>`
+    blockquote indentation, no hard-wrapped lines inside the draft. See Stage 4.
 10. **Never submit applications automatically.** Fill everything, then stop. User clicks Submit.
     This holds for the unattended orchestrator loop too: its authority ends at discovery,
     research, tracker state, and saved-list bookkeeping.
