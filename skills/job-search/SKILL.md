@@ -430,7 +430,9 @@ The instrument is in the private repo, `~/workspace/jobs/strategy/coherence-inst
 2. The main thread re-derives the verdict under the instrument's rules (n floors, windowed
    flags, growth absorption, Blind gap, seed read for small companies) and writes the columns
    plus a one-line note. Verdicts: `Advance`, `Price`, `Pass`, `Unknown`.
-3. `Pass` rows: set `stage=withdrawn` with the note `coherence Pass`. `Unknown` rows keep the
+3. `Pass` rows at `discovered` through `applied`: set `stage=withdrawn` with the note
+   `coherence Pass`. Rows at `interviewing` or `offer` keep their stage; write the verdict and
+   note only, and flag it in the summary for the user. `Unknown` rows keep the
    seed read in the note. `Advance` rows are the candidates for `add`.
 4. Append the report to `~/workspace/jobs/strategy/coherence-cases.md` under a dated heading,
    and commit.
@@ -445,8 +447,7 @@ verdict is `Advance` and whose posting is live. Stops before any submission, as 
 
 Read `references/orchestrator-loop.md` first. Normally invoked by a systemd timer.
 
-1. **Liveness.** For each tracker row in a pre-application stage (`discovered` through
-   `ready_to_apply`), fetch the posting and look for **explicit on-page closure text** ("no
+1. **Liveness.** For each tracker row at `discovered` through `applied`, fetch the posting and look for **explicit on-page closure text** ("no
    longer accepting applications", "position has been filled", "posting has expired").
    - Closure text found → `stage=closed`, record the phrase and date in `notes`.
    - Loads normally → no change; clear any inconclusive counter.
@@ -454,7 +455,9 @@ Read `references/orchestrator-loop.md` first. Normally invoked by a systemd time
      `notes`, leave `stage` untouched, retry next week. Never archive on a status code.
    - Inconclusive 4 weeks running → surface in the summary for a human decision, still no
      auto-archive.
-   - Rows at `applied` or beyond are skipped entirely.
+   - Rows at `interviewing` or `offer` are **never touched**; if their posting looks closed,
+     say so in the summary and leave the stage alone. A closed posting during an active process
+     usually means the req was filled by the candidate in it.
 2. **Sync.** Reconcile each writable source's saved list to match the tracker (mapping table in
    `orchestrator-loop.md`). Rows at `rejected` / `withdrawn` / `closed` get archived on the
    source site. **LinkedIn writes are governed by `linkedin-safety.md` §7**: archive/un-save
@@ -664,10 +667,14 @@ runtime (flags / env / read from the private profile) instead.
 10. **Never submit applications automatically.** Fill everything, then stop. User clicks Submit.
     This holds for the unattended orchestrator loop too: its authority ends at discovery,
     research, tracker state, and saved-list bookkeeping.
-11. **Geographic filter.** Roles must be Remote (United States) or in the San Francisco Bay
+11. **Active processes are hands-off.** No sub-command, timer, or agent changes the stage of a
+    row at `interviewing` or `offer`. Liveness, geography, and coherence verdicts write notes
+    and columns on those rows and surface them; only the user moves them. Rows at `discovered`
+    through `applied` may be auto-closed or withdrawn by the rules above.
+12. **Geographic filter.** Roles must be Remote (United States) or in the San Francisco Bay
     Area. Anything requiring residence in another country or time zone, or in-office in another
     US metro, is closed at discovery with a note, never researched. Read the location line of
     the actual posting, not the aggregator's.
-12. **No PII anywhere in this public skill** (SKILL.md, scripts, assets — the whole repo). All
+13. **No PII anywhere in this public skill** (SKILL.md, scripts, assets — the whole repo). All
     personal details live in the private job-search repo (`~/workspace/jobs/`, incl. `profile.md`)
     and are passed to scripts at runtime via flags or env vars. See the repo `AGENTS.md`.
