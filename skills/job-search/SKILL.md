@@ -142,11 +142,25 @@ Walk through the full pipeline for a new job posting end-to-end.
    ## Notes
    <initial observations on fit, concerns>
    ```
+5b. **Geographic filter and liveness.** Read the posting's own location line from the snapshot.
+   If it is not Remote (United States) or San Francisco Bay Area, set `stage=closed` with the
+   note `geo: <location line>` and stop here. If the page redirected to a board index or says
+   the role is filled, `stage=closed`, note `dead at add`, stop.
+5c. **Coherence read.** If no row for this company has a `coh_verdict`, run `vet <company>`
+   now (one `sonnet` subagent, tier-1 section of
+   `~/workspace/jobs/strategy/coherence-instrument.md`) and write `coh_cell`,
+   `coh_derivative`, `coh_verdict`, `coh_date` on the row. `Pass` → `stage=withdrawn`, note
+   `coherence Pass`, stop. `Price` → continue, but carry the why-line into `job-posting.md`
+   "Notes" so the loop questions and the seat shape are visible from the first artifact.
+   `Advance` and `Unknown` → continue. A company vetted in the last 90 days is not re-vetted.
 6. Research company on Glassdoor via a **haiku subagent**:
    - Spawn an Agent (model: haiku) with the task: "Navigate to `https://www.glassdoor.com/Search/results.htm?keyword=<URL-encoded-company-name>`. Snapshot results, click through to the company's Reviews page, snapshot the overview. Scroll and snapshot to capture more highlights. CAPTCHA RULE: if any snapshot shows a CAPTCHA or security challenge, STOP, navigate to google.com, and return 'CAPTCHA_DETECTED'. Otherwise, return verbatim: overall rating, CEO approval %, recommend-to-friend %, pros/cons summary, and 2-3 notable review snippets. Do not summarize."
    - The subagent returns raw text; the main thread writes `glassdoor.md` and synthesizes takeaways.
    - If the company isn't found on Glassdoor, the subagent notes that and returns.
-   - Save to `applications/<id>/glassdoor.md`:
+   - Save to `applications/<id>/glassdoor.md`. Add a "Coherence read" line at the top with the
+     verdict and why-line from 5c, and put the negative-tail themes under "Takeaways" as loop
+     questions (how expectations are written before a review, how comp changed, what happened
+     the last time someone pushed back, how often teams re-form).
      ```markdown
      # Glassdoor — <Company>
 
