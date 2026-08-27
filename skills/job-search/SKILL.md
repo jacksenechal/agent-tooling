@@ -442,7 +442,7 @@ Create a fresh job search directory from scratch.
 1. `mkdir -p ~/workspace/job-search && cd ~/workspace/job-search && git init`
 2. Create tracker with headers:
    ```bash
-   echo "id,company,role,url,stage,resume_branch,role_branch,application_url,referral_contact,referral_status,date_found,date_applied,date_updated,notes" > tracker.csv
+   echo "id,company,role,url,stage,resume_branch,role_branch,application_url,referral_contact,referral_status,date_found,date_applied,date_updated,notes,coh_cell,coh_derivative,coh_verdict,coh_date" > tracker.csv
    ```
 3. Create directories: `mkdir -p jobs data/linkedin`
 4. Create `CLAUDE.md`:

@@ -20,6 +20,10 @@ File: `~/workspace/job-search/tracker.csv`
 | `date_applied` | date | no | ISO date when application was submitted |
 | `date_updated` | date | yes | ISO date of last update to this row |
 | `notes` | string | no | Brief freeform notes |
+| `coh_cell` | enum | no | Coherence 2x2 cell from tier-1 read: `target`, `disconnected`, `extraction`, `incoherent`, `mixed`, `unknown` (see `jobs/strategy/coherence-instrument.md`) |
+| `coh_derivative` | int | no | Coherence derivative, -2 to +2 |
+| `coh_verdict` | enum | no | `Advance`, `Price`, `Pass`, `Unknown` |
+| `coh_date` | date | no | ISO date of the coherence read |
 
 ## Pipeline Stages
 
