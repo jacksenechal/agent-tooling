@@ -20,7 +20,8 @@ will review artifacts after the run completes.
 
 Any job-pipeline task. Beyond the phrases in the description, this also covers:
 "application status", "knowledge graph", "warmth score", "ingest linkedin", "saved jobs",
-"scan bookmarks", "still open", and "orchestrator loop".
+"scan bookmarks", "still open", "orchestrator loop", "scout", "vet", "coherence read", and
+"find high-coherence companies".
 
 The orchestrator runs on timers rather than on request: a daily scan of saved-job lists
 (`discover`) and a weekly posting-liveness sweep plus saved-list sync (`liveness`). See
@@ -361,12 +362,70 @@ Read `references/orchestrator-loop.md` first. Normally invoked by a systemd time
    LinkedIn per its safety protocol). Return the list verbatim with each job's site key.
 2. Diff against `tracker.csv` on `(source, key)` parsed from the `url` column. Never dedup on
    company + title: two distinct postings can share a title.
-3. For each new job: append at `stage=discovered`, then run Stage 1 research and advance to
-   `stage=researched`. Synthesize the fit assessment **on the main thread (Opus)**.
+3. For each new job: apply the geographic filter (see `scout`), append at `stage=discovered`,
+   run `vet` on the company if it has no `coh_verdict`, then run Stage 1 research and advance
+   to `stage=researched`. Synthesize the fit assessment **on the main thread (Opus)**.
 4. If more than 8 new jobs appear in one run, research the 8 with the strongest surface fit,
    leave the rest at `discovered`, and **say so explicitly** in the summary. Never silently cap.
 5. Commit and push the jobs repo. Append a run line to `orchestrator.log`.
 6. Print a one-screen summary: jobs added, fit read on each, obvious misfits worth pruning.
+
+### `scout [--minutes N] [--max M]` — Coherence-driven discovery
+
+Find open roles at high-coherence, high-ceiling companies by searching for the **companies
+first and the roles second**. Method and calibration live in the private repo:
+`~/workspace/jobs/strategy/coherence-instrument.md` ("Tier 1 inverted") and
+`references/coherence-pipeline.md` here. Default time box 10 minutes, ~25 tool calls, max 15
+hits. Runs as one `sonnet` subagent with `WebSearch`/`WebFetch`; no browser.
+
+1. Read the target role profile (`~/workspace/jobs/strategy/leadership-search.md`, "Target Role
+   Profile") and the **geographic filter** below.
+2. Build a candidate list of 10-15 companies from the five inversion signals: public handbook /
+   RFC / postmortem archive; founder-led 7+ years, no PE event, revenue coupled to output;
+   Glassdoor CEO approval ≥ 90% at n ≥ 100; inverse-Conway language on the engineering blog;
+   Westrum/DORA vocabulary with a mechanism attached. Exclude every company already in
+   `tracker.csv` (any stage) and any company with a 2025-26 layoff on layoffs.fyi.
+3. For each candidate, one ATS-restricted search (`site:greenhouse.io OR site:ashbyhq.com OR
+   site:lever.co "<company>" "engineering manager" OR "director of engineering" OR "head of
+   engineering"`) or one careers-page fetch. Open the posting and read the **location line**.
+4. **Geographic filter, hard.** Keep only roles that are Remote (United States) or located in
+   the San Francisco Bay Area (hybrid is fine). Discard, without adding to the tracker, any role
+   whose location line names another country or time zone, another US metro as in-office, or
+   "Remote (Canada/UK/EU)" twins. Greenhouse often posts one role per country: pick the US one.
+   If the location is ambiguous, keep it and flag it; the vet step reads the posting again.
+5. Add each surviving role to `tracker.csv` at `stage=discovered` with the id pattern
+   `<company>-<role-slug>`, `date_found=today`, and a note `Found by scout <date>: <signals hit>`.
+   Then run `vet` on each new company (below). Never silently cap: if the time box ended with
+   candidates unchecked, say which.
+6. Print: hits table (company, signals, role, location, URL, vet verdict), candidates checked
+   with no matching role, and a two-line method note (what found the hits, what was noise).
+
+### `vet <company | id | --all-unvetted>` — Tier-1 coherence read
+
+Score a company on the organizational-coherence instrument from summary pages only, and write
+the result to the tracker's `coh_cell`, `coh_derivative`, `coh_verdict`, `coh_date` columns.
+The instrument is in the private repo, `~/workspace/jobs/strategy/coherence-instrument.md`
+(the "Tier 1: the fast filter" section); scored cases and calibration in `coherence-cases.md`.
+
+1. Spawn one `sonnet` subagent per company, in parallel, at most **12-15 per session** (the
+   WebSearch quota is per session and shared). Each reads the Tier 1 section, uses
+   `WebSearch`/`WebFetch` only, caps at ~20 calls, records every number with its n, and returns
+   the tier-1 report block. If WebSearch is quota-refused, the agent falls back to a playwright
+   browser driving `https://duckduckgo.com/html/?q=` (two servers, so two agents at a time).
+   No LinkedIn, no review scraping.
+2. The main thread re-derives the verdict under the instrument's rules (n floors, windowed
+   flags, growth absorption, Blind gap, seed read for small companies) and writes the columns
+   plus a one-line note. Verdicts: `Advance`, `Price`, `Pass`, `Unknown`.
+3. `Pass` rows: set `stage=withdrawn` with the note `coherence Pass`. `Unknown` rows keep the
+   seed read in the note. `Advance` rows are the candidates for `add`.
+4. Append the report to `~/workspace/jobs/strategy/coherence-cases.md` under a dated heading,
+   and commit.
+
+### `pipeline` — Scout, vet, and prep Advance rows end to end
+
+One command: `scout` → `vet` on every new company → `add` (Stages 1-6) for every row whose
+verdict is `Advance` and whose posting is live. Stops before any submission, as always. See
+`references/coherence-pipeline.md` for the runbook and the expected shape of a run.
 
 ### `liveness` — Weekly liveness sweep + saved-list sync (orchestrator)
 
@@ -591,6 +650,10 @@ runtime (flags / env / read from the private profile) instead.
 10. **Never submit applications automatically.** Fill everything, then stop. User clicks Submit.
     This holds for the unattended orchestrator loop too: its authority ends at discovery,
     research, tracker state, and saved-list bookkeeping.
-11. **No PII anywhere in this public skill** (SKILL.md, scripts, assets — the whole repo). All
+11. **Geographic filter.** Roles must be Remote (United States) or in the San Francisco Bay
+    Area. Anything requiring residence in another country or time zone, or in-office in another
+    US metro, is closed at discovery with a note, never researched. Read the location line of
+    the actual posting, not the aggregator's.
+12. **No PII anywhere in this public skill** (SKILL.md, scripts, assets — the whole repo). All
     personal details live in the private job-search repo (`~/workspace/jobs/`, incl. `profile.md`)
     and are passed to scripts at runtime via flags or env vars. See the repo `AGENTS.md`.
