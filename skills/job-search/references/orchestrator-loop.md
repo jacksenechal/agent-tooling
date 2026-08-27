@@ -85,10 +85,11 @@ explicitly in the notification. Never silently truncate.
 
 ### Liveness
 
-Checks whether postings are still open. **Applies only to rows in a pre-application stage**
-(`discovered` through `ready_to_apply`). Rows at `applied`, `interviewing`, `offer`,
-`rejected`, `withdrawn`, or `closed` are never touched: once you are in a process, the
-posting coming down means nothing.
+Checks whether postings are still open. **Applies to rows at `discovered` through `applied`.**
+Rows at `interviewing` or `offer` are never touched: once you are in an active process, the
+posting coming down usually means the req was filled by the candidate in it, so it is reported
+in the summary and the stage is left to the user. Terminal rows (`rejected`, `withdrawn`,
+`closed`) are skipped.
 
 **Detection is semantic, not HTTP.** A 404, a timeout, a redirect, or a network error is
 **inconclusive**, never a closure. ATS platforms 404 and redirect for many reasons unrelated
