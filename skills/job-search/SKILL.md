@@ -678,3 +678,9 @@ runtime (flags / env / read from the private profile) instead.
 13. **No PII anywhere in this public skill** (SKILL.md, scripts, assets — the whole repo). All
     personal details live in the private job-search repo (`~/workspace/jobs/`, incl. `profile.md`)
     and are passed to scripts at runtime via flags or env vars. See the repo `AGENTS.md`.
+14. **Maintain the tracker artifact.** The private repo publishes a sortable/filterable view of
+    `tracker.csv` as a Claude artifact (a primary interface surface for the user). After any
+    change to `tracker.csv` or to a `job-posting.md` location line, rebuild and republish it:
+    `python3 artifact/build.py`, then publish `artifact/tracker-view.html` with the Artifact
+    tool passing the pinned URL from the private repo's `artifact/README.md` as `url` (never
+    create a new artifact). Skip only if the private repo has no `artifact/` directory.
