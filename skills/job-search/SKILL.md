@@ -509,7 +509,7 @@ See `references/knowledge-graph.md` → "Lifecycle".
 2. If `stage=applied`, also set `date_applied`
 3. If the new stage is `rejected`, `withdrawn`, or `closed`, archive the folder too; if it is a
    live stage and the folder sits under `applications/archived/`, move it back. See "Archiving".
-4. Commit and push: `git add tracker.csv && git commit -m "Update <id> stage to <stage>" && git push`
+4. Commit and push: `git add -A && git commit -m "Update <id> stage to <stage>" && git push` (`-A` so an archive move is included)
 
 ### `sync` — Pull both repos to current device
 
