@@ -106,7 +106,7 @@ Outcomes:
 
 | Finding | Action |
 |---|---|
-| Explicit closure text | `stage=closed`, note the phrase found and the date |
+| Explicit closure text | `stage=closed`, note the phrase found and the date, archive the folder (`git mv applications/<id> applications/archived/<id>`) |
 | Posting loads normally | No change; clear any prior inconclusive counter |
 | 404 / error / redirect / unparseable | **Inconclusive.** Increment a counter in `notes`, leave `stage` alone, retry next week |
 
@@ -127,6 +127,10 @@ Reconciles each writable source's saved list with the tracker. Tracker is author
 | `interviewing` | Interviewing | keep saved |
 | `offer` | Offer | keep saved |
 | `rejected` / `withdrawn` / `closed` | Rejected / archive | **archive** |
+
+"Archive" here means the external site's own archive/un-save state. These rows are also
+archived locally by this point (folder under `applications/archived/`, per SKILL.md's
+"Archiving" section) — the two are separate and both should already be true.
 
 LinkedIn writes are governed by `linkedin-safety.md` §7: archive/un-save only, max 10 per
 session counting double against the page budget, full delay-and-breather treatment on each,

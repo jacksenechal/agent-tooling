@@ -48,6 +48,13 @@ user pulled out). It is only ever applied to rows in a pre-application stage, an
 explicit on-page closure text — never on a 404, timeout, or redirect. See
 `orchestrator-loop.md`.
 
+## Archived
+
+A row at `rejected`, `withdrawn`, or `closed` is archived: the stage/notes update above is
+paired with moving its folder, `git mv applications/<id> applications/archived/<id>`. The row
+itself stays in `tracker.csv` — there's no separate archived CSV. `interviewing` and `offer`
+are never archived. See SKILL.md's "Archiving" section for the full rule and how to reverse it.
+
 ## CSV Handling Rules
 
 1. **Always use Python's `csv` module** for reading and writing. Never use raw string manipulation — job descriptions and notes can contain commas, quotes, and newlines.

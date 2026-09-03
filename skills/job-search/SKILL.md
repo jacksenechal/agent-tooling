@@ -32,6 +32,7 @@ those sub-commands below, and `watch setup` to install the timers.
 - **Job search repo**: `~/workspace/jobs/` (private GitHub repo)
 - **Tracker**: `~/workspace/jobs/tracker.csv`
 - **Job research**: `~/workspace/jobs/applications/<id>/`
+- **Archived job research** (dead tracker rows): `~/workspace/jobs/applications/archived/<id>/`
 - **Resume repo**: `~/workspace/resume/` (separate git repo)
 - **LinkedIn safety rules**: See `references/linkedin-safety.md` — READ THIS before any LinkedIn browsing
 
@@ -115,7 +116,8 @@ Walk through the full pipeline for a new job posting end-to-end.
 **Stage 1: Discover & Research**
 
 1. Generate an `id` slug (e.g., `stripe-infra-eng`, `aircall-ai-eng`). Short, semantic, unique. Do NOT ask the user.
-2. Create `~/workspace/jobs/applications/<id>/`
+2. Create `~/workspace/jobs/applications/<id>/`. If `applications/archived/<id>/` already
+   exists, move it back instead of starting fresh (see "Archiving").
 3. Add row to `tracker.csv`: `stage=discovered`, `date_found=today`
 4. Scrape the job posting via a **haiku subagent**:
    - Spawn an Agent (model: haiku) with the task: "Navigate to `<linkedin-url>` following the LinkedIn safety protocol (see `references/linkedin-safety.md`). Use `browser_snapshot` to capture the full accessibility tree. CAPTCHA RULE: if any snapshot shows a CAPTCHA or security challenge, STOP, navigate to google.com, and return 'CAPTCHA_DETECTED'. Otherwise, return the verbatim snapshot text — company, role, full description, application URL, location, requirements, hiring team (names, titles, connection degree). Do not summarize."
@@ -145,7 +147,8 @@ Walk through the full pipeline for a new job posting end-to-end.
 5b. **Geographic filter and liveness.** Read the posting's own location line from the snapshot.
    If it is not Remote (United States) or San Francisco Bay Area, set `stage=closed` with the
    note `geo: <location line>` and stop here. If the page redirected to a board index or says
-   the role is filled, `stage=closed`, note `dead at add`, stop.
+   the role is filled, `stage=closed`, note `dead at add`, stop. Either way, archive the folder
+   on the way out (see "Archiving").
 5c. **Coherence read.** If no row for this company has a `coh_verdict`, run `vet <company>`
    now (one `sonnet` subagent, tier-1 section of
    `~/workspace/jobs/strategy/coherence-instrument.md`) and write `coh_cell`,
@@ -449,18 +452,22 @@ Read `references/orchestrator-loop.md` first. Normally invoked by a systemd time
 
 1. **Liveness.** For each tracker row at `discovered` through `applied`, fetch the posting and look for **explicit on-page closure text** ("no
    longer accepting applications", "position has been filled", "posting has expired").
-   - Closure text found → `stage=closed`, record the phrase and date in `notes`.
+   - Closure text found → `stage=closed`, record the phrase and date in `notes`, and archive
+     the folder: `git mv applications/<id> applications/archived/<id>` (see "Archiving" below).
    - Loads normally → no change; clear any inconclusive counter.
    - 404 / timeout / redirect / unparseable → **inconclusive**. Increment a counter in
-     `notes`, leave `stage` untouched, retry next week. Never archive on a status code.
+     `notes`, leave `stage` untouched, retry next week. Never archive on a status code — this
+     means no stage change and no folder move.
    - Inconclusive 4 weeks running → surface in the summary for a human decision, still no
-     auto-archive.
+     auto-archive (no stage change, no folder move).
    - Rows at `interviewing` or `offer` are **never touched**; if their posting looks closed,
      say so in the summary and leave the stage alone. A closed posting during an active process
      usually means the req was filled by the candidate in it.
 2. **Sync.** Reconcile each writable source's saved list to match the tracker (mapping table in
    `orchestrator-loop.md`). Rows at `rejected` / `withdrawn` / `closed` get archived on the
-   source site. **LinkedIn writes are governed by `linkedin-safety.md` §7**: archive/un-save
+   source site (the external site's own archive/un-save state — distinct from the local
+   tracker+folder archiving defined above, which these rows already have by this point).
+   **LinkedIn writes are governed by `linkedin-safety.md` §7**: archive/un-save
    only, max 10 per session counting double against the page budget, abort to read-only on any
    anomaly. If more than 10 need syncing, do 10 and leave the rest for next week.
 3. Commit and push. Append a run line to `orchestrator.log`.
@@ -500,7 +507,9 @@ See `references/knowledge-graph.md` → "Lifecycle".
 
 1. Read `tracker.csv`, find the row, update `stage` and `date_updated`
 2. If `stage=applied`, also set `date_applied`
-3. Commit and push: `git add tracker.csv && git commit -m "Update <id> stage to <stage>" && git push`
+3. If the new stage is `rejected`, `withdrawn`, or `closed`, archive the folder too; if it is a
+   live stage and the folder sits under `applications/archived/`, move it back. See "Archiving".
+4. Commit and push: `git add tracker.csv && git commit -m "Update <id> stage to <stage>" && git push`
 
 ### `sync` — Pull both repos to current device
 
@@ -529,6 +538,7 @@ Create a fresh job search directory from scratch.
    - **Tracker**: `~/workspace/jobs/tracker.csv`
    - **Resume repo**: `~/workspace/resume/`
    - **Job research**: `~/workspace/jobs/applications/<id>/`
+   - **Archived job research**: `~/workspace/jobs/applications/archived/<id>/`
 
    ## LinkedIn Safety — CRITICAL
    See the `job-search` skill's `references/linkedin-safety.md` for full protocol.
@@ -591,6 +601,24 @@ Create a fresh job search directory from scratch.
    - Veteran status:
    ```
 4. Ask the user to fill in their details (or confirm existing ones)
+
+## Archiving
+
+"Archived" means the same thing in two places, updated together, always as a pair:
+
+1. **Tracker**: `stage` is `rejected`, `withdrawn`, or `closed`; `date_updated` is set; the
+   reason is in `notes`. The row stays in `tracker.csv` — there is no separate archived CSV.
+2. **Folder**: `git mv applications/<id> applications/archived/<id>`. Research artifacts are
+   kept in full, just out of the way.
+
+`interviewing` and `offer` are never archived — they're live (offer is terminal but live).
+
+**Reversing it**: if a row re-opens, `git mv applications/archived/<id> applications/<id>` and
+set the live stage. When starting work on a job id, check `applications/archived/<id>/` first —
+if it exists, move it back rather than creating a fresh folder.
+
+**Resolving a folder**: anything that looks up an application folder must check
+`applications/<id>/` first, then `applications/archived/<id>/`.
 
 ## CSV Read/Write
 
