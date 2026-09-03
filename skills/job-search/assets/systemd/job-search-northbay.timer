@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly timer for the North Bay leadership re-scout
+
+[Timer]
+OnCalendar=Tue *-*-* 09:00:00
+RandomizedDelaySec=7200
+Persistent=true
+
+[Install]
+WantedBy=timers.target

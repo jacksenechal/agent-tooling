@@ -5,13 +5,13 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $(basename "$0") <discover|liveness> [--force] [--dry-run]" >&2
+  echo "Usage: $(basename "$0") <discover|liveness|northbay> [--force] [--dry-run]" >&2
 }
 
 MODE="${1:-}"
 shift || true
 
-if [[ "$MODE" != "discover" && "$MODE" != "liveness" ]]; then
+if [[ "$MODE" != "discover" && "$MODE" != "liveness" && "$MODE" != "northbay" ]]; then
   usage
   exit 2
 fi
@@ -103,6 +103,7 @@ fi
 case "$MODE" in
   discover) PROMPT="/job-search discover" ;;
   liveness) PROMPT="/job-search liveness" ;;
+  northbay) PROMPT="Read $JOBS_DIR/strategy/north-bay-rescout.md and execute it end to end." ;;
 esac
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -120,6 +121,11 @@ DURATION=$(( $(date +%s) - START_TS ))
 if [[ "$CLAUDE_EXIT" -eq 0 ]]; then
   log_line "ok" "$DURATION" "$CLAUDE_EXIT"
   echo 0 > "$FAILCOUNT_FILE"
+  # Desktop alert with the run's one-line summary when the mode wrote one.
+  SUMMARY_FILE="$JOBS_DIR/.${MODE}-last-summary"
+  if [[ -s "$SUMMARY_FILE" ]] && command -v notify-send >/dev/null 2>&1; then
+    notify-send "job-search $MODE" "$(cat "$SUMMARY_FILE")" || true
+  fi
 else
   log_line "failed" "$DURATION" "$CLAUDE_EXIT"
   FAILS=0
