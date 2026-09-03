@@ -127,16 +127,18 @@ Walk through the full pipeline for a new job posting end-to-end.
    ```markdown
    # <Company> — <Role>
 
-   **URL**: <linkedin-url>
-   **Application URL**: <external-url-if-found>
-   **Location**: <location>
-   **Date Found**: <today>
+   - **URL**: <linkedin-url>
+   - **Application URL**: <external-url-if-found>
+   - **Location**: <location>
+   - **Date Found**: <today>
 
    ## Hiring Team
    - <name> — <title> (<connection degree>)
 
    ## Job Description
-   <full description — verbatim from snapshot>
+   <full description, converted to real markdown: `pandoc -f html -t gfm-raw_html --wrap=none`
+    on the posting HTML (Greenhouse: boards-api `content`), strip `&nbsp;` and trailing `\`;
+    headings, `- ` lists, blank lines between paragraphs. Never paste tag-stripped text.>
 
    ## Key Requirements
    <bulleted list>
